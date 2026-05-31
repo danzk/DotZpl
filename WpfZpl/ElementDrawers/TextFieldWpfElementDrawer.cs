@@ -40,7 +40,10 @@ namespace WpfZpl.ElementDrawers
             }
 
             ZplFont font = textField.Font;
-            (float fontSize, float scaleX) = FontScale.GetFontScaling(font.FontName, font.FontHeight, font.FontWidth, printDensityDpmm);
+            bool isPixelFont = options.FontManager.IsPixelFont(font.FontName);
+            (float fontSize, float scaleX) = isPixelFont
+                ? FontScale.GetPixelFontScaling(font.FontName, font.FontHeight, font.FontWidth, printDensityDpmm)
+                : FontScale.GetFontScaling(font.FontName, font.FontHeight, font.FontWidth, printDensityDpmm);
 
             GlyphTypeface gt = options.FontManager.FontLoader(font.FontName);
             Typeface tf = options.FontManager.TypefaceLoader(font.FontName);

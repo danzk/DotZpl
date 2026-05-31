@@ -13,6 +13,12 @@
     <EmbeddedResource Include="Resources\ZplGS.ttf">
       <LogicalName>WpfZpl.ZplGS.ttf</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\font-a.ttf">
+      <LogicalName>WpfZpl.font-a.ttf</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\font-c.ttf">
+      <LogicalName>WpfZpl.font-c.ttf</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

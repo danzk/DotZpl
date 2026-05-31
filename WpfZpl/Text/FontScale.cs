@@ -124,6 +124,19 @@ namespace WpfZpl.Text
             return GetFontScale(fontName, printDensityDpmm)?.height * scalingFactor * heightScale;
         }
 
+        /// <summary>
+        /// Em size for an embedded pixel font whose em square equals the matrix cell height. Returns
+        /// the same scaling as <see cref="GetFontScaling"/> but without the labelary ×1.1 height
+        /// correction (which is tuned for the system fallback fonts), so the cell renders at exactly the
+        /// requested dot height. Pixel fonts are always in the scale table, so the correction is always
+        /// applied and can be divided back out cleanly.
+        /// </summary>
+        public static (float fontSize, float scaleX) GetPixelFontScaling(string fontName, int fontHeight, int fontWidth, int printDensityDpmm)
+        {
+            (float fontSize, float scaleX) = GetFontScaling(fontName, fontHeight, fontWidth, printDensityDpmm);
+            return (fontSize / heightScale, scaleX);
+        }
+
         public static (float fontSize, float scaleX) GetFontScaling(string fontName, int fontHeight, int fontWidth, int printDensityDpmm)
         {
             (int height, int width)? fontScale = GetFontScale(fontName, printDensityDpmm);

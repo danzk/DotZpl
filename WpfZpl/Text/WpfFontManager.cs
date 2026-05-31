@@ -46,16 +46,38 @@ namespace WpfZpl.Text
         private GlyphTypeface? _glyph0;
         private GlyphTypeface? _glyphA;
         private GlyphTypeface? _glyphGs;
+        private GlyphTypeface? _glyphFontA;
+        private GlyphTypeface? _glyphFontC;
 
         internal Typeface Typeface0 => _typeface0 ??= ResolveTypeface("0");
         internal Typeface TypefaceA => _typefaceA ??= ResolveTypeface("A");
         internal GlyphTypeface Glyph0 => _glyph0 ??= ToGlyph(Typeface0);
         internal GlyphTypeface GlyphA => _glyphA ??= ToGlyph(TypefaceA);
-        internal GlyphTypeface GlyphGS => _glyphGs ??= LoadEmbeddedGs();
+        internal GlyphTypeface GlyphGS => _glyphGs ??= LoadEmbedded("WpfZpl.ZplGS.ttf", "WpfZpl_ZplGS.ttf");
+
+        /// <summary>Embedded pixel font matching Zebra Font A (9 x 5 dot matrix).</summary>
+        public GlyphTypeface GlyphFontA => _glyphFontA ??= LoadEmbedded("WpfZpl.font-a.ttf", "WpfZpl_font-a.ttf");
+
+        /// <summary>Embedded pixel font matching Zebra Font C/D (18 x 10 dot matrix).</summary>
+        public GlyphTypeface GlyphFontC => _glyphFontC ??= LoadEmbedded("WpfZpl.font-c.ttf", "WpfZpl_font-c.ttf");
+
+        /// <summary>
+        /// Whether a ZPL font name is rendered with an embedded fixed-cell pixel font (which is sized
+        /// by its matrix cell height, not the proportional ×1.1 correction). Defaults to A / C / D
+        /// (the fonts shipped in Resources). Set to <c>_ => false</c> to render everything with the
+        /// system font stacks (used by the Skia-vs-WPF comparison harness).
+        /// </summary>
+        public Func<string, bool> IsPixelFont { get; set; } = name => name is "A" or "C" or "D";
 
         public WpfFontManager()
         {
-            FontLoader = fontName => fontName == "0" ? Glyph0 : GlyphA;
+            FontLoader = fontName => fontName switch
+            {
+                "0" => Glyph0,
+                "A" => GlyphFontA,
+                "C" or "D" => GlyphFontC,
+                _ => GlyphA,
+            };
             TypefaceLoader = fontName => fontName == "0" ? Typeface0 : TypefaceA;
         }
 
@@ -90,14 +112,14 @@ namespace WpfZpl.Text
             throw new InvalidOperationException($"No GlyphTypeface for typeface '{typeface.FontFamily}'.");
         }
 
-        private static GlyphTypeface LoadEmbeddedGs()
+        private static GlyphTypeface LoadEmbedded(string logicalName, string tempFileName)
         {
             Assembly assembly = typeof(WpfFontManager).Assembly;
-            using Stream? stream = assembly.GetManifestResourceStream("WpfZpl.ZplGS.ttf")
-                ?? throw new InvalidOperationException("Embedded font resource 'WpfZpl.ZplGS.ttf' not found.");
+            using Stream? stream = assembly.GetManifestResourceStream(logicalName)
+                ?? throw new InvalidOperationException($"Embedded font resource '{logicalName}' not found.");
 
             // GlyphTypeface can only be constructed from a URI, so spill the font to a stable temp file.
-            string path = Path.Combine(Path.GetTempPath(), "WpfZpl_ZplGS.ttf");
+            string path = Path.Combine(Path.GetTempPath(), tempFileName);
             using (var ms = new MemoryStream())
             {
                 stream.CopyTo(ms);
