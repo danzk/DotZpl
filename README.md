@@ -70,6 +70,24 @@ dotnet test  WpfZpl.UnitTest/WpfZpl.UnitTest.csproj
 
 ## Usage
 
+### As a WPF control (easiest)
+
+`ZplLabelView` (in `WpfZpl.Controls`) parses a ZPL string and renders it as vector content, with
+fit-to-control scaling (`Stretch`) and whole-label `RotationAngle`:
+
+```xml
+<Window xmlns:zpl="clr-namespace:WpfZpl.Controls;assembly=WpfZpl">
+    <zpl:ZplLabelView Zpl="{Binding ZplText}"
+                      LabelWidth="101.6" LabelHeight="152.4" PrintDensityDpmm="8"
+                      RotationAngle="0" Stretch="Uniform" OpaqueBackground="True" />
+</Window>
+```
+
+It only re-parses when the content properties change; rotation/stretch are transform-only. For more
+control, use the renderer directly:
+
+### Programmatic
+
 ```csharp
 using BinaryKits.Zpl.Viewer;   // parser/storage (Skia-free Analyzer assembly)
 using WpfZpl.Rendering;
