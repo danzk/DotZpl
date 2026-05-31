@@ -66,6 +66,16 @@ namespace WpfZpl.Controls
             nameof(Options), typeof(WpfDrawerOptions), typeof(ZplLabelView),
             new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnContentChanged));
 
+        /// <summary>Horizontal pan of the rendered label, in device-independent units (applied after scaling).</summary>
+        public static readonly DependencyProperty OffsetXProperty = DependencyProperty.Register(
+            nameof(OffsetX), typeof(double), typeof(ZplLabelView),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        /// <summary>Vertical pan of the rendered label, in device-independent units (applied after scaling).</summary>
+        public static readonly DependencyProperty OffsetYProperty = DependencyProperty.Register(
+            nameof(OffsetY), typeof(double), typeof(ZplLabelView),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
         public string? Zpl { get => (string?)GetValue(ZplProperty); set => SetValue(ZplProperty, value); }
         public double LabelWidth { get => (double)GetValue(LabelWidthProperty); set => SetValue(LabelWidthProperty, value); }
         public double LabelHeight { get => (double)GetValue(LabelHeightProperty); set => SetValue(LabelHeightProperty, value); }
@@ -74,6 +84,8 @@ namespace WpfZpl.Controls
         public Stretch Stretch { get => (Stretch)GetValue(StretchProperty); set => SetValue(StretchProperty, value); }
         public bool OpaqueBackground { get => (bool)GetValue(OpaqueBackgroundProperty); set => SetValue(OpaqueBackgroundProperty, value); }
         public WpfDrawerOptions? Options { get => (WpfDrawerOptions?)GetValue(OptionsProperty); set => SetValue(OptionsProperty, value); }
+        public double OffsetX { get => (double)GetValue(OffsetXProperty); set => SetValue(OffsetXProperty, value); }
+        public double OffsetY { get => (double)GetValue(OffsetYProperty); set => SetValue(OffsetYProperty, value); }
 
         #endregion
 
@@ -134,13 +146,17 @@ namespace WpfZpl.Controls
         protected override Size MeasureOverride(Size availableSize)
         {
             EnsureDrawing();
-            return ScaleToFit(RotatedBounds().Size, availableSize);
+
+            // Act as a viewport: fill the available space when constrained, and fall back to the
+            // natural (rotated) label size only when a dimension is unconstrained. The label is then
+            // scaled/centred/panned within that viewport in OnRender, so panning never resizes it.
+            Size natural = RotatedBounds().Size;
+            double width = double.IsInfinity(availableSize.Width) ? natural.Width : availableSize.Width;
+            double height = double.IsInfinity(availableSize.Height) ? natural.Height : availableSize.Height;
+            return new Size(width, height);
         }
 
-        protected override Size ArrangeOverride(Size finalSize)
-        {
-            return ScaleToFit(RotatedBounds().Size, finalSize);
-        }
+        protected override Size ArrangeOverride(Size finalSize) => finalSize;
 
         protected override void OnRender(DrawingContext drawingContext)
         {
@@ -156,54 +172,36 @@ namespace WpfZpl.Controls
                 return;
             }
 
-            double scaleX = RenderSize.Width / rb.Width;
-            double scaleY = RenderSize.Height / rb.Height;
+            // Scale the label to the viewport per Stretch (independent of the pan offset).
+            double sx = RenderSize.Width / rb.Width;
+            double sy = RenderSize.Height / rb.Height;
+            (double scaleX, double scaleY) = Stretch switch
+            {
+                Stretch.None => (1.0, 1.0),
+                Stretch.Fill => (sx, sy),
+                Stretch.UniformToFill => (Math.Max(sx, sy), Math.Max(sx, sy)),
+                _ => (Math.Min(sx, sy), Math.Min(sx, sy)),   // Uniform
+            };
+
+            // Centre the scaled label in the viewport, then apply the pan (the pan only translates —
+            // it does not affect the scale, so the label keeps its size).
+            double scaledWidth = rb.Width * scaleX;
+            double scaledHeight = rb.Height * scaleY;
+            double centreAndPanX = (RenderSize.Width - scaledWidth) / 2 + OffsetX;
+            double centreAndPanY = (RenderSize.Height - scaledHeight) / 2 + OffsetY;
 
             Size label = LabelSizeDots();
             var transform = new TransformGroup();
             transform.Children.Add(new RotateTransform(RotationAngle, label.Width / 2, label.Height / 2)); // rotate about label centre
-            transform.Children.Add(new TranslateTransform(-rb.X, -rb.Y));                                  // move rotated box to origin
-            transform.Children.Add(new ScaleTransform(scaleX, scaleY));                                    // scale to the arranged size
+            transform.Children.Add(new TranslateTransform(-rb.X, -rb.Y));                                  // rotated box to origin
+            transform.Children.Add(new ScaleTransform(scaleX, scaleY));                                    // scale to viewport
+            transform.Children.Add(new TranslateTransform(centreAndPanX, centreAndPanY));                  // centre + pan
 
-            // Clip to our render bounds (matters for Stretch.UniformToFill / None overflow).
             drawingContext.PushClip(new RectangleGeometry(new Rect(RenderSize)));
             drawingContext.PushTransform(transform);
             drawingContext.DrawDrawing(_drawing);
             drawingContext.Pop();
             drawingContext.Pop();
-        }
-
-        /// <summary>Mirror of WPF's Viewbox/Image stretch maths, honouring infinite constraints.</summary>
-        private Size ScaleToFit(Size natural, Size available)
-        {
-            if (natural.Width <= 0 || natural.Height <= 0)
-            {
-                return new Size(0, 0);
-            }
-
-            bool infW = double.IsInfinity(available.Width);
-            bool infH = double.IsInfinity(available.Height);
-
-            double sx = infW ? 1 : available.Width / natural.Width;
-            double sy = infH ? 1 : available.Height / natural.Height;
-
-            switch (Stretch)
-            {
-                case Stretch.None:
-                    sx = sy = 1;
-                    break;
-                case Stretch.Fill:
-                    // independent x/y; already 1 where unconstrained
-                    break;
-                case Stretch.Uniform:
-                    sx = sy = (infW && infH) ? 1 : infW ? sy : infH ? sx : Math.Min(sx, sy);
-                    break;
-                case Stretch.UniformToFill:
-                    sx = sy = (infW && infH) ? 1 : infW ? sy : infH ? sx : Math.Max(sx, sy);
-                    break;
-            }
-
-            return new Size(natural.Width * sx, natural.Height * sy);
         }
     }
 }

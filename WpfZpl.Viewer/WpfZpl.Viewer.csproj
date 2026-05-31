@@ -1,27 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
+    <RootNamespace>WpfZpl.Viewer</RootNamespace>
+    <AssemblyName>WpfZpl.Viewer</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
-    <PackageReference Include="MSTest.TestAdapter" Version="4.0.1" />
-    <PackageReference Include="MSTest.TestFramework" Version="4.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\WpfZpl\WpfZpl.csproj" />
-    <ProjectReference Include="..\WpfZpl.Viewer\WpfZpl.Viewer.csproj" />
-    <ProjectReference Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Viewer\BinaryKits.Zpl.Viewer.csproj" />
   </ItemGroup>
 
-  <!-- Copy the shared label corpus next to the test assembly. -->
+  <!-- Sample labels (Example/ and Test/) shown in the browser, copied next to the app. -->
   <ItemGroup>
     <Content Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Viewer.WebApi\Labels\**\*.zpl2"
              Link="Labels\%(RecursiveDir)%(Filename)%(Extension)"

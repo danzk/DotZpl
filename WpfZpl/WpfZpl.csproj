@@ -19,8 +19,9 @@
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
-  <!-- Skia-free: references the ZPL parser/analysis core, NOT the SkiaSharp renderer. -->
+  <!-- Skia-free: references the ZPL element model and the parser/analysis core, NOT the SkiaSharp renderer. -->
   <ItemGroup>
+    <ProjectReference Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Label\BinaryKits.Zpl.Label.csproj" />
     <ProjectReference Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Analyzer\BinaryKits.Zpl.Analyzer.csproj" />
   </ItemGroup>
 

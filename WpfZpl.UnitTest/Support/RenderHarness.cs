@@ -1,11 +1,15 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Windows.Media;
 
 using BinaryKits.Zpl.Label.Elements;
 using BinaryKits.Zpl.Viewer;
 using BinaryKits.Zpl.Viewer.ElementDrawers;
+
+using SkiaSharp;
 
 using WpfZpl.Rendering;
 using WpfZpl.Text;
@@ -39,13 +43,47 @@ namespace WpfZpl.UnitTest
             var analyzer = new ZplAnalyzer(storage);
             IList<ZplElementBase> elements = analyzer.Analyze(zpl).LabelInfos[0].ZplElements;
 
-            byte[] skiaPng = new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true })
-                .Draw(elements, width, height, dpmm);
+            (DrawerOptions skiaOptions, WpfDrawerOptions wpfOptions) = BuildPinnedOptions(textBackend);
 
-            byte[] wpfPng = new WpfZplElementDrawer(storage, new WpfDrawerOptions { OpaqueBackground = true, TextBackend = textBackend })
-                .DrawPng(elements, width, height, dpmm);
+            byte[] skiaPng = new ZplElementDrawer(storage, skiaOptions).Draw(elements, width, height, dpmm);
+            byte[] wpfPng = new WpfZplElementDrawer(storage, wpfOptions).DrawPng(elements, width, height, dpmm);
 
             return (skiaPng, wpfPng);
+        }
+
+        // The comparison checks WPF == Skia, so both backends must use the *same* font. Pin them to
+        // explicit font files (the faces both engines resolved before any extra fonts were installed),
+        // so the result is deterministic regardless of which fonts are present on the machine.
+        private static readonly Lazy<(string font0, string fontA)?> PinnedFonts = new(() =>
+        {
+            string dir = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            string font0 = Path.Combine(dir, "arialbd.ttf");   // Arial Bold  -> ZPL font "0"
+            string fontA = Path.Combine(dir, "lucon.ttf");     // Lucida Console -> ZPL font "A"
+            return File.Exists(font0) && File.Exists(fontA) ? (font0, fontA) : null;
+        });
+
+        private static (DrawerOptions, WpfDrawerOptions) BuildPinnedOptions(TextBackend textBackend)
+        {
+            if (PinnedFonts.Value is not (string font0, string fontA))
+            {
+                // Fallback: system font resolution (still works, just not font-install-proof).
+                return (new DrawerOptions { OpaqueBackground = true },
+                        new WpfDrawerOptions { OpaqueBackground = true, TextBackend = textBackend });
+            }
+
+            var skiaManager = new FontManager();
+            SKTypeface skia0 = SKTypeface.FromFile(font0);
+            SKTypeface skiaA = SKTypeface.FromFile(fontA);
+            skiaManager.FontLoader = name => name == "0" ? skia0 : skiaA;
+            var skiaOptions = new DrawerOptions(skiaManager) { OpaqueBackground = true };
+
+            var wpfManager = new WpfFontManager();
+            var wpf0 = new GlyphTypeface(new Uri(font0));
+            var wpfA = new GlyphTypeface(new Uri(fontA));
+            wpfManager.FontLoader = name => name == "0" ? wpf0 : wpfA;
+            var wpfOptions = new WpfDrawerOptions(wpfManager) { OpaqueBackground = true, TextBackend = textBackend };
+
+            return (skiaOptions, wpfOptions);
         }
 
         /// <summary>Render-and-compare on an STA thread; returns the similarity result.</summary>

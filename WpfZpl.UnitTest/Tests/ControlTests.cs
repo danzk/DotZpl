@@ -12,47 +12,66 @@ namespace WpfZpl.UnitTest
     [TestClass]
     public class ControlTests
     {
-        // 50x30 mm @ 8 dpmm = 400 x 240 dots; a centered box so something draws.
+        // 50x30 mm @ 8 dpmm = 400 x 240 dots; a box so something draws.
         private const string Zpl = "^XA^FO50,50^GB300,140,6^FS^XZ";
 
         [TestMethod]
-        public void Control_ScalesUniformly_AndRendersContent()
+        public void Control_FillsViewport_AndRendersContent()
         {
             var result = StaRunner.Run(() =>
             {
                 var view = new ZplLabelView { Zpl = Zpl, LabelWidth = 50, LabelHeight = 30, PrintDensityDpmm = 8 };
                 (Size desired, byte[] px, int w, int h) = Render(view, new Size(400, 300));
-
-                long dark = 0, white = 0;
-                for (int i = 0; i < w * h; i++)
-                {
-                    int p = i * 4;
-                    if (px[p] < 64 && px[p + 1] < 64 && px[p + 2] < 64) dark++;
-                    else if (px[p] > 200 && px[p + 1] > 200 && px[p + 2] > 200) white++;
-                }
-
-                return (desired, dark, white);
+                return (desired, dark: CountDark(px), white: CountWhite(px));
             });
 
-            // Uniform fit of 400x240 into 400x300 → scale 1.0 → 400x240, aspect preserved.
-            Assert.AreEqual(400.0, result.desired.Width, 1.0, "width fills available");
-            Assert.AreEqual(240.0, result.desired.Height, 1.0, "height keeps 400:240 aspect");
-            Assert.IsTrue(result.dark > 100, $"box should render black pixels (got {result.dark})");
-            Assert.IsTrue(result.white > 1000, $"opaque white background expected (got {result.white})");
+            // The control is a viewport: it fills the available space (the label is scaled/centred inside).
+            Assert.AreEqual(400.0, result.desired.Width, 0.5, "fills available width");
+            Assert.AreEqual(300.0, result.desired.Height, 0.5, "fills available height");
+            Assert.IsTrue(result.dark > 100, $"box renders black pixels (got {result.dark})");
+            Assert.IsTrue(result.white > 1000, $"opaque white label background expected (got {result.white})");
         }
 
         [TestMethod]
-        public void Control_Rotation90_SwapsAspect()
+        public void Control_Pan_MovesWithoutResizing()
         {
-            Size desired = StaRunner.Run(() =>
+            // Stretch.None keeps the label at 1:1 and smaller than the viewport, so a moderate pan
+            // stays fully inside (no clipping). The black ink count must be identical — proving the pan
+            // only translates the label and does not change its size.
+            long noPan = StaRunner.Run(() =>
             {
-                var view = new ZplLabelView { Zpl = Zpl, LabelWidth = 50, LabelHeight = 30, PrintDensityDpmm = 8, RotationAngle = 90 };
-                return Render(view, new Size(400, 300)).desired;
+                var view = new ZplLabelView { Zpl = Zpl, LabelWidth = 50, LabelHeight = 30, PrintDensityDpmm = 8, Stretch = Stretch.None };
+                return CountDark(Render(view, new Size(800, 600)).px);
             });
 
-            // 400x240 rotated 90° → 240x400; Uniform into 400x300 → scale 0.75 → 180x300.
-            Assert.AreEqual(180.0, desired.Width, 1.5, "rotated width");
-            Assert.AreEqual(300.0, desired.Height, 1.5, "rotated height fills available");
+            long panned = StaRunner.Run(() =>
+            {
+                var view = new ZplLabelView { Zpl = Zpl, LabelWidth = 50, LabelHeight = 30, PrintDensityDpmm = 8, Stretch = Stretch.None, OffsetX = 120, OffsetY = 80 };
+                return CountDark(Render(view, new Size(800, 600)).px);
+            });
+
+            Assert.IsTrue(noPan > 100, "label rendered");
+            Assert.AreEqual(noPan, panned, 4, "panning must move the label, not resize it (ink count unchanged)");
+        }
+
+        private static long CountDark(byte[] bgra)
+        {
+            long n = 0;
+            for (int p = 0; p < bgra.Length; p += 4)
+            {
+                if (bgra[p] < 64 && bgra[p + 1] < 64 && bgra[p + 2] < 64) n++;
+            }
+            return n;
+        }
+
+        private static long CountWhite(byte[] bgra)
+        {
+            long n = 0;
+            for (int p = 0; p < bgra.Length; p += 4)
+            {
+                if (bgra[p] > 200 && bgra[p + 1] > 200 && bgra[p + 2] > 200) n++;
+            }
+            return n;
         }
 
         private static (Size desired, byte[] px, int w, int h) Render(FrameworkElement element, Size available)
@@ -61,8 +80,8 @@ namespace WpfZpl.UnitTest
             element.Arrange(new Rect(element.DesiredSize));
             element.UpdateLayout();
 
-            int w = Math.Max(1, (int)Math.Ceiling(element.DesiredSize.Width));
-            int h = Math.Max(1, (int)Math.Ceiling(element.DesiredSize.Height));
+            int w = Math.Max(1, (int)Math.Ceiling(element.RenderSize.Width));
+            int h = Math.Max(1, (int)Math.Ceiling(element.RenderSize.Height));
             var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(element);
 

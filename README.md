@@ -30,6 +30,7 @@ WpfZpl/                     WPF rendering library (net10.0-windows, UseWPF)
   Text/                    GlyphRun-based text renderer + font manager
   ElementDrawers/          one drawer per ZPL element type
   Resources/               embedded graphic-symbol font (ZplGS.ttf)
+WpfZpl.Viewer/             native WPF MVVM viewer app (ports the WebApi web UI)
 WpfZpl.UnitTest/           MSTest suite: Skia-vs-WPF image comparison
   Support/                 render harness, comparer (SSIM/pixel), STA runner
   Tests/                   one test class per element category
@@ -136,6 +137,13 @@ File.WriteAllBytes("label.png", png);
 | 1D barcodes | Code 128/39/93, ANSI Codabar, Interleaved 2of5, EAN-13, UPC-A/E, UPC extension |
 | 2D barcodes | QR, Data Matrix, Aztec, PDF417, MaxiCode |
 | Images | `^GF` graphic field, `^IM` image move, `^XG` recall graphic, `~DG`/`~DY` downloads |
+
+## Viewer app
+
+`WpfZpl.Viewer` is a small WPF MVVM application that ports the WebApi's browser UI to the desktop:
+a Test/Example label browser, a ZPL editor with size/dpmm presets, whole-label rotation, a live
+preview (the `ZplLabelView` control), a non-supported-commands panel, and Save PNG / Save ZPL. Run it
+with `dotnet run --project WpfZpl.Viewer`.
 
 ## Test harness & fidelity
 
