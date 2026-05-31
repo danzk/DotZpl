@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="WpfZpl/WpfZpl.csproj" />
+  <Project Path="WpfZpl.UnitTest/WpfZpl.UnitTest.csproj" />
+  <Project Path="BinaryKits.Zpl/src/BinaryKits.Zpl.Viewer/BinaryKits.Zpl.Viewer.csproj" />
 </Solution>
