@@ -43,7 +43,7 @@ namespace WpfZpl.UnitTest
                 .Draw(elements, width, height, dpmm);
 
             byte[] wpfPng = new WpfZplElementDrawer(storage, new WpfDrawerOptions { OpaqueBackground = true, TextBackend = textBackend })
-                .Draw(elements, width, height, dpmm);
+                .DrawPng(elements, width, height, dpmm);
 
             return (skiaPng, wpfPng);
         }

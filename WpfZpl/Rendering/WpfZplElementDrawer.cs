@@ -63,22 +63,101 @@ namespace WpfZpl.Rendering
         }
 
         /// <summary>
-        /// Draw the label to a PNG byte array.
+        /// Build the label as a reusable, freezable WPF <see cref="DrawingGroup"/> — pure vector, no
+        /// rasterisation. Render it in a control's <c>OnRender</c> via <c>dc.DrawDrawing(group)</c>,
+        /// wrap it in a <see cref="DrawingImage"/> for an <c>Image.Source</c>, or rasterise it yourself.
+        /// Coordinates are in ZPL dots (1 dot = 1 device-independent unit); apply a transform to scale.
         /// </summary>
         /// <param name="elements">Zpl elements</param>
         /// <param name="labelWidth">Label width in millimetres</param>
         /// <param name="labelHeight">Label height in millimetres</param>
         /// <param name="printDensityDpmm">Dots per millimetre</param>
-        public byte[] Draw(
+        public DrawingGroup CreateDrawing(
             IEnumerable<ZplElementBase> elements,
             double labelWidth = 101.6,
             double labelHeight = 152.4,
             int printDensityDpmm = 8)
         {
-            // Match Skia's Convert.ToInt32 (banker's) rounding so both backends produce identical dimensions.
-            int width = Convert.ToInt32(labelWidth * printDensityDpmm);
-            int height = Convert.ToInt32(labelHeight * printDensityDpmm);
+            (int width, int height) = LabelSize(labelWidth, labelHeight, printDensityDpmm);
+            (Geometry? background, Geometry? whiteRegion, List<WpfImageOp> images) =
+                BuildContent(elements, width, height, printDensityDpmm);
 
+            var group = new DrawingGroup();
+            if (!_options.Antialias)
+            {
+                RenderOptions.SetEdgeMode(group, EdgeMode.Aliased);
+            }
+
+            using (DrawingContext dc = group.Open())
+            {
+                RenderContent(dc, width, height, background, whiteRegion, images);
+            }
+
+            if (group.CanFreeze)
+            {
+                group.Freeze();
+            }
+
+            return group;
+        }
+
+        /// <summary>
+        /// Draw the label directly into an existing <see cref="DrawingContext"/> — e.g. from a custom
+        /// control's <c>OnRender</c>. Coordinates are in ZPL dots; apply a transform on your visual to scale.
+        /// </summary>
+        public void Draw(
+            DrawingContext drawingContext,
+            IEnumerable<ZplElementBase> elements,
+            double labelWidth = 101.6,
+            double labelHeight = 152.4,
+            int printDensityDpmm = 8)
+        {
+            (int width, int height) = LabelSize(labelWidth, labelHeight, printDensityDpmm);
+            (Geometry? background, Geometry? whiteRegion, List<WpfImageOp> images) =
+                BuildContent(elements, width, height, printDensityDpmm);
+            RenderContent(drawingContext, width, height, background, whiteRegion, images);
+        }
+
+        /// <summary>
+        /// Convenience: rasterise the label to a PNG byte array via <see cref="RenderTargetBitmap"/> at
+        /// 96 dpi. Prefer <see cref="CreateDrawing"/> / <see cref="Draw(DrawingContext, IEnumerable{ZplElementBase}, double, double, int)"/>
+        /// for live WPF rendering; this is for file export and image-based testing. Must run on an STA thread.
+        /// </summary>
+        public byte[] DrawPng(
+            IEnumerable<ZplElementBase> elements,
+            double labelWidth = 101.6,
+            double labelHeight = 152.4,
+            int printDensityDpmm = 8)
+        {
+            (int width, int height) = LabelSize(labelWidth, labelHeight, printDensityDpmm);
+            DrawingGroup drawing = CreateDrawing(elements, labelWidth, labelHeight, printDensityDpmm);
+
+            var visual = new DrawingVisual();
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                dc.DrawDrawing(drawing);
+            }
+
+            var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(visual);
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(rtb));
+            using var ms = new MemoryStream();
+            encoder.Save(ms);
+            return ms.ToArray();
+        }
+
+        private static (int width, int height) LabelSize(double labelWidth, double labelHeight, int printDensityDpmm)
+        {
+            // Match Skia's Convert.ToInt32 (banker's) rounding so both backends produce identical dimensions.
+            return (Convert.ToInt32(labelWidth * printDensityDpmm), Convert.ToInt32(labelHeight * printDensityDpmm));
+        }
+
+        /// <summary>Run the drawer pipeline, accumulating the black/white geometry regions and images.</summary>
+        private (Geometry? background, Geometry? whiteRegion, List<WpfImageOp> images) BuildContent(
+            IEnumerable<ZplElementBase> elements, int width, int height, int printDensityDpmm)
+        {
             var context = new WpfDrawContext(width, height);
 
             Geometry? background = null;   // running black region
@@ -145,59 +224,42 @@ namespace WpfZpl.Rendering
                 }
             }
 
-            return Rasterize(width, height, background, whiteRegion, images);
+            return (background, whiteRegion, images);
         }
 
-        private byte[] Rasterize(int width, int height, Geometry? background, Geometry? whiteRegion, List<WpfImageOp> images)
+        /// <summary>Paint the accumulated regions/images into a drawing context (vector).</summary>
+        private void RenderContent(DrawingContext dc, int width, int height, Geometry? background, Geometry? whiteRegion, List<WpfImageOp> images)
         {
-            var visual = new DrawingVisual();
-            if (!_options.Antialias)
+            // Always paint the full label rectangle so the resulting Drawing's bounds are the whole
+            // label (white when opaque; otherwise an invisible Transparent fill just to set bounds, so
+            // a DrawingImage keeps the correct size/aspect instead of collapsing to the inked content).
+            dc.DrawRectangle(_options.OpaqueBackground ? Brushes.White : Brushes.Transparent, null, new Rect(0, 0, width, height));
+
+            if (background != null)
             {
-                RenderOptions.SetEdgeMode(visual, EdgeMode.Aliased);
+                dc.DrawGeometry(Brushes.Black, null, background);
             }
 
-            using (DrawingContext dc = visual.RenderOpen())
+            if (whiteRegion != null)
             {
-                if (_options.OpaqueBackground)
-                {
-                    dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
-                }
-
-                if (background != null)
-                {
-                    dc.DrawGeometry(Brushes.Black, null, background);
-                }
-
-                if (whiteRegion != null)
-                {
-                    dc.DrawGeometry(Brushes.White, null, whiteRegion);
-                }
-
-                foreach (WpfImageOp op in images)
-                {
-                    bool pushed = op.Transform != null && op.Transform != Transform.Identity;
-                    if (pushed)
-                    {
-                        dc.PushTransform(op.Transform);
-                    }
-
-                    dc.DrawImage(op.Image, op.Destination);
-
-                    if (pushed)
-                    {
-                        dc.Pop();
-                    }
-                }
+                dc.DrawGeometry(Brushes.White, null, whiteRegion);
             }
 
-            var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            rtb.Render(visual);
+            foreach (WpfImageOp op in images)
+            {
+                bool pushed = op.Transform != null && op.Transform != Transform.Identity;
+                if (pushed)
+                {
+                    dc.PushTransform(op.Transform);
+                }
 
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(rtb));
-            using var ms = new MemoryStream();
-            encoder.Save(ms);
-            return ms.ToArray();
+                dc.DrawImage(op.Image, op.Destination);
+
+                if (pushed)
+                {
+                    dc.Pop();
+                }
+            }
         }
 
         private static Geometry? Union(Geometry? a, Geometry? b)

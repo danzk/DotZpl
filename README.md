@@ -71,7 +71,7 @@ dotnet test  WpfZpl.UnitTest/WpfZpl.UnitTest.csproj
 ## Usage
 
 ```csharp
-using BinaryKits.Zpl.Viewer;
+using BinaryKits.Zpl.Viewer;   // parser/storage (Skia-free Analyzer assembly)
 using WpfZpl.Rendering;
 
 // 1. Parse ZPL (one storage instance is reused so ~DG/~DY downloads are
@@ -80,10 +80,27 @@ var storage  = new PrinterStorage();
 var analyzer = new ZplAnalyzer(storage);
 var elements = analyzer.Analyze(zplString).LabelInfos[0].ZplElements;
 
-// 2. Render to a PNG byte[] (run on an STA thread).
 var drawer = new WpfZplElementDrawer(storage, new WpfDrawerOptions { OpaqueBackground = true });
-byte[] png = drawer.Draw(elements, labelWidth: 101.6, labelHeight: 152.4, printDensityDpmm: 8);
+```
 
+The primary output is **native, scalable WPF drawing content** — no rasterisation. Coordinates are
+in ZPL dots (1 dot = 1 DIU); apply a transform to scale.
+
+```csharp
+// As a reusable, freezable Drawing — e.g. bind to an Image (vector, crisp at any zoom):
+DrawingGroup label = drawer.CreateDrawing(elements, 101.6, 152.4, printDensityDpmm: 8);
+myImage.Source = new DrawingImage(label);
+
+// Or draw straight into a custom control's render pass:
+protected override void OnRender(DrawingContext dc) =>
+    _drawer.Draw(dc, _elements, 101.6, 152.4, printDensityDpmm: 8);
+```
+
+A `DrawPng` convenience is provided for file export / image testing (it rasterises the same
+`DrawingGroup` via `RenderTargetBitmap`; run on an STA thread):
+
+```csharp
+byte[] png = drawer.DrawPng(elements, 101.6, 152.4, 8);
 File.WriteAllBytes("label.png", png);
 ```
 
