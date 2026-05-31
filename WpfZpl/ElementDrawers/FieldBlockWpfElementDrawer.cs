@@ -37,6 +37,7 @@ namespace WpfZpl.ElementDrawers
             (float fontSize, float scaleX) = isPixelFont
                 ? FontScale.GetPixelFontScaling(font.FontName, font.FontHeight, font.FontWidth, printDensityDpmm)
                 : FontScale.GetFontScaling(font.FontName, font.FontHeight, font.FontWidth, printDensityDpmm);
+            scaleX *= (float)options.FontManager.GetHorizontalScale(font.FontName);
 
             GlyphTypeface gt = options.FontManager.FontLoader(font.FontName);
             Typeface tf = options.FontManager.TypefaceLoader(font.FontName);

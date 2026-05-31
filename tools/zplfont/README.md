@@ -38,6 +38,7 @@ cd tools/zplfont
 
 # edit glyphs/font-a.pixfont, then compile to the embedded resource:
 python build_font.py glyphs/font-a.pixfont A -o ../../WpfZpl/Resources/font-a.ttf
+python build_font.py glyphs/font-b.pixfont B -o ../../WpfZpl/Resources/font-b.ttf
 python build_font.py glyphs/font-c.pixfont C -o ../../WpfZpl/Resources/font-c.ttf
 ```
 
@@ -46,8 +47,14 @@ gap, baseline — Tables 29/30/31) and produces a TTF that renders **exactly** a
 drawn at `emSize = matrixHeight`: em = cell, monospace advance = width + gap, baseline metrics,
 each `#` a 1-dot square (merged into rectangles when `skia-pathops` is installed).
 
-To add a new font (e.g. **B**, 11×7 caps-only): write `glyphs/font-b.pixfont`, then
-`python build_font.py glyphs/font-b.pixfont B -o ../../WpfZpl/Resources/font-b.ttf`.
+**Font B** (`glyphs/font-b.pixfont`) is the bold, caps-only 11×7 font: lowercase `a-z`
+alias the uppercase glyphs (Font B renders lowercase input as uppercase). It was authored
+by hand the same way — to add another font, write its `glyphs/font-<x>.pixfont` and
+`python build_font.py glyphs/font-<x>.pixfont <KEY> -o ../../WpfZpl/Resources/font-<x>.ttf`.
+
+`build_font.py` sets each glyph's left side bearing to its actual `xMin` (not 0), so
+centred glyphs (e.g. `!`, `I`, `T` in a caps font) keep `lsb == xMin` and round-trip
+losslessly through `extract_pixels.py`.
 
 ## Scripts
 

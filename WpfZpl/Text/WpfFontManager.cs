@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Media;
 
@@ -47,6 +48,7 @@ namespace WpfZpl.Text
         private GlyphTypeface? _glyphA;
         private GlyphTypeface? _glyphGs;
         private GlyphTypeface? _glyphFontA;
+        private GlyphTypeface? _glyphFontB;
         private GlyphTypeface? _glyphFontC;
 
         internal Typeface Typeface0 => _typeface0 ??= ResolveTypeface("0");
@@ -58,16 +60,29 @@ namespace WpfZpl.Text
         /// <summary>Embedded pixel font matching Zebra Font A (9 x 5 dot matrix).</summary>
         public GlyphTypeface GlyphFontA => _glyphFontA ??= LoadEmbedded("WpfZpl.font-a.ttf", "WpfZpl_font-a.ttf");
 
+        /// <summary>Embedded pixel font matching Zebra Font B (11 x 7 dot matrix; bold, caps-only).</summary>
+        public GlyphTypeface GlyphFontB => _glyphFontB ??= LoadEmbedded("WpfZpl.font-b.ttf", "WpfZpl_font-b.ttf");
+
         /// <summary>Embedded pixel font matching Zebra Font C/D (18 x 10 dot matrix).</summary>
         public GlyphTypeface GlyphFontC => _glyphFontC ??= LoadEmbedded("WpfZpl.font-c.ttf", "WpfZpl_font-c.ttf");
 
         /// <summary>
         /// Whether a ZPL font name is rendered with an embedded fixed-cell pixel font (which is sized
-        /// by its matrix cell height, not the proportional ×1.1 correction). Defaults to A / C / D
+        /// by its matrix cell height, not the proportional ×1.1 correction). Defaults to A / B / C / D
         /// (the fonts shipped in Resources). Set to <c>_ => false</c> to render everything with the
         /// system font stacks (used by the Skia-vs-WPF comparison harness).
         /// </summary>
-        public Func<string, bool> IsPixelFont { get; set; } = name => name is "A" or "C" or "D";
+        public Func<string, bool> IsPixelFont { get; set; } = name => name is "A" or "B" or "C" or "D";
+
+        /// <summary>
+        /// Horizontal scale applied to ZPL font "0" when it resolves to a <em>non-condensed</em> face
+        /// (i.e. the Arial fallback on machines without one of the <see cref="FontStack0"/> condensed
+        /// fonts installed). The real Zebra font 0 is condensed (~0.86 of Arial's width), so plain Arial
+        /// renders too wide; this squeezes it to approximate font 0. When a genuinely condensed font is
+        /// resolved (Roboto Condensed, Swis721 Cn, ...) no extra scaling is applied. Set to 1.0 to disable
+        /// (e.g. the comparison harness, which pins both backends to raw Arial).
+        /// </summary>
+        public double Font0FallbackCondense { get; set; } = 0.86;
 
         public WpfFontManager()
         {
@@ -75,6 +90,7 @@ namespace WpfZpl.Text
             {
                 "0" => Glyph0,
                 "A" => GlyphFontA,
+                "B" => GlyphFontB,
                 "C" or "D" => GlyphFontC,
                 _ => GlyphA,
             };
@@ -100,6 +116,34 @@ namespace WpfZpl.Text
             }
 
             return new Typeface(new FontFamily("Arial"), FontStyles.Normal, weight, stretch);
+        }
+
+        /// <summary>
+        /// Extra horizontal scale to compose onto a font's <c>scaleX</c>. For font "0" this condenses the
+        /// non-condensed Arial fallback (see <see cref="Font0FallbackCondense"/>); 1.0 for everything else.
+        /// </summary>
+        public double GetHorizontalScale(string fontName)
+        {
+            if (fontName != "0")
+            {
+                return 1.0;
+            }
+
+            return IsCondensedFamily(FontLoader("0")) ? 1.0 : Font0FallbackCondense;
+        }
+
+        private static bool IsCondensedFamily(GlyphTypeface gt)
+        {
+            foreach (string name in gt.FamilyNames.Values)
+            {
+                string n = name.ToLowerInvariant();
+                if (n.Contains("condensed") || n.Contains("narrow") || Regex.IsMatch(n, @"\bcn\b"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static GlyphTypeface ToGlyph(Typeface typeface)

@@ -38,6 +38,14 @@ def build_glyph(rows, baseline, g=UNITS_PER_DOT):
     return pen.glyph()
 
 
+def left_side_bearing(rows, g=UNITS_PER_DOT):
+    """Leftmost inked column in font units (= the glyph's xMin). Setting hmtx lsb to this
+    keeps lsb == xMin, the TrueType convention; otherwise tools/renderers that honour lsb
+    (e.g. fontTools' glyph set) reposition centred glyphs. Empty glyphs (space) -> 0."""
+    cols = [c for row in rows for c, ch in enumerate(row) if ch == pixfont.ON]
+    return min(cols) * g if cols else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source", help="input .pixfont")
@@ -64,7 +72,7 @@ def main():
     metrics = {".notdef": (advance, 0)}
     for gl in glyphs:
         tt_glyphs[gl.name] = build_glyph(gl.rows, c.baseline)
-        metrics[gl.name] = (advance, 0)
+        metrics[gl.name] = (advance, left_side_bearing(gl.rows))
     fb.setupGlyf(tt_glyphs)
 
     try:

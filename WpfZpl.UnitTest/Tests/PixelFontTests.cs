@@ -53,6 +53,37 @@ namespace WpfZpl.UnitTest
         }
 
         [TestMethod]
+        public void FontB_Caps_MatchMatrix()
+        {
+            // Matrix B = 11x7, baseline 11 (caps-only, no descenders): an 'H' inks the full 7x11 cell.
+            (int w, int h) = InkSize("^XA^FO40,40^ABN,110^FDH^FS^XZ");
+            TestContext.WriteLine($"Font B 'H' @110: {w}x{h}");
+            Assert.AreEqual(7 * Scale, w, Scale, "Font B 'H' width = W (7 dots)");
+            Assert.AreEqual(11 * Scale, h, Scale, "Font B 'H' cap height = baseline = cell (11 dots)");
+        }
+
+        [TestMethod]
+        public void FontB_Pitch_IsWidthPlusGap()
+        {
+            int one = InkSize("^XA^FO40,40^ABN,110^FDH^FS^XZ").w;
+            int two = InkSize("^XA^FO40,40^ABN,110^FDHH^FS^XZ").w;
+            int pitch = two - one;
+            TestContext.WriteLine($"Font B pitch @110: {pitch}");
+            Assert.AreEqual(9 * Scale, pitch, Scale, "advance pitch = W (7) + intercharacter gap (2)");
+        }
+
+        [TestMethod]
+        public void FontB_IsCapsOnly()
+        {
+            // Font B has no lowercase: 'h' renders as the uppercase 'H' glyph (same ink box).
+            (int uw, int uh) = InkSize("^XA^FO40,40^ABN,110^FDH^FS^XZ");
+            (int lw, int lh) = InkSize("^XA^FO40,40^ABN,110^FDh^FS^XZ");
+            TestContext.WriteLine($"Font B 'H'={uw}x{uh}  'h'={lw}x{lh}");
+            Assert.AreEqual(uw, lw, "lowercase 'h' width = uppercase 'H' (caps-only)");
+            Assert.AreEqual(uh, lh, "lowercase 'h' height = uppercase 'H' (caps-only)");
+        }
+
+        [TestMethod]
         public void FontC_MatchesMatrix_AndIsTwiceFontA()
         {
             (int aw, int ah) = InkSize("^XA^FO40,40^AAN,90^FDH^FS^XZ");

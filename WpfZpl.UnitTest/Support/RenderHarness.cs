@@ -81,7 +81,8 @@ namespace WpfZpl.UnitTest
             var wpf0 = new GlyphTypeface(new Uri(font0));
             var wpfA = new GlyphTypeface(new Uri(fontA));
             wpfManager.FontLoader = name => name == "0" ? wpf0 : wpfA;
-            wpfManager.IsPixelFont = _ => false;   // comparison stays on system fonts (matches the Skia side)
+            wpfManager.IsPixelFont = _ => false;       // comparison stays on system fonts (matches the Skia side)
+            wpfManager.Font0FallbackCondense = 1.0;    // pinned to raw Arial; Skia doesn't condense, so neither do we here
             var wpfOptions = new WpfDrawerOptions(wpfManager) { OpaqueBackground = true, TextBackend = textBackend };
 
             return (skiaOptions, wpfOptions);
