@@ -33,13 +33,22 @@ WpfZpl/                     WPF rendering library (net10.0-windows, UseWPF)
 WpfZpl.UnitTest/           MSTest suite: Skia-vs-WPF image comparison
   Support/                 render harness, comparer (SSIM/pixel), STA runner
   Tests/                   one test class per element category
-BinaryKits.Zpl/            git submodule — upstream parser, model, Skia reference, sample labels
+BinaryKits.Zpl/            git submodule (fork) — see split below
 WpfZpl.slnx                solution
 ```
 
-`BinaryKits.Zpl` is a **git submodule**; the WPF code lives in the outer `WpfZpl` project and
-references it for the ZPL parser, element model, symbology encoders, and (in tests) the Skia
-renderer used as the comparison reference. The submodule is not modified by this project.
+`BinaryKits.Zpl` is a **git submodule**. Its `Viewer` assembly originally bundled the ZPL parser
+together with the SkiaSharp renderer, which would force a Skia dependency on any consumer. It is
+split into two assemblies so the WPF library stays **Skia-free**:
+
+- **`BinaryKits.Zpl.Analyzer`** — the Skia-free parsing/analysis core (`ZplAnalyzer`, command
+  analyzers, `VirtualPrinter`, `IPrinterStorage`, models, symbology encoders, helpers). `WpfZpl`
+  references this.
+- **`BinaryKits.Zpl.Viewer`** — the original SkiaSharp drawers, now referencing the Analyzer. Used
+  only by the **test project** as the comparison reference.
+
+So `WpfZpl` and a consuming WPF app depend only on the Skia-free Analyzer; SkiaSharp never enters
+the application's dependency graph.
 
 ## Requirements
 
