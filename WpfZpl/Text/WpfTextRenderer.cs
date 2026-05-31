@@ -1,7 +1,6 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Windows;
-using System.Windows.Media;
 
 namespace WpfZpl.Text
 {
@@ -22,7 +21,7 @@ namespace WpfZpl.Text
     public static class WpfTextRenderer
     {
         /// <summary>Line spacing ≈ Skia <c>SKFont.Spacing</c> (used for barcode interpretation margins).</summary>
-        public static double LineSpacing(GlyphTypeface gt, double emSize) => gt.Height * emSize;
+        public static double LineSpacing(GlyphTypeface gt, double emSize) => Compat.FontLineHeightEm(gt) * emSize;
 
         /// <summary>Cap height of "X" ≈ Skia <c>MeasureText("X").Height</c> (independent of scaleX).</summary>
         public static double CapHeight(GlyphTypeface gt, double emSize)
@@ -37,8 +36,8 @@ namespace WpfZpl.Text
             double sum = 0;
             foreach (char c in text)
             {
-                ushort gi = gt.CharacterToGlyphMap.TryGetValue(c, out ushort g) ? g : (ushort)0;
-                sum += gt.AdvanceWidths[gi] * emSize;
+                ushort gi = Compat.GlyphIndex(gt, c);
+                sum += Compat.GlyphAdvanceEm(gt, gi) * emSize;
             }
 
             return sum * scaleX;
@@ -51,16 +50,10 @@ namespace WpfZpl.Text
             return geo.Bounds;
         }
 
-        // NOTE on font weight: WPF's linear-coverage geometry fill renders text slightly heavier than
-        // Skia's gamma-corrected, hinted glyph rasteriser, most visibly at small sizes (~1.25x ink at
-        // em=13; large text already matches). We investigated compensating with a small uniform edge
-        // erosion (subtracting a thin outline ring from each glyph fill). It DID match Skia's ink
-        // (e.g. FieldDataText 1.077x -> 0.994x), but it made NO measurable difference to SSIM: the
-        // residual text gap is sub-pixel AA/positioning between the two rasterisers, not weight, and
-        // SSIM (locally contrast-normalised) does not reward weight-matching. The erosion was therefore
-        // removed to avoid the extra GetWidenedPathGeometry cost for no metric gain. We also confirmed
-        // FormattedText is no lighter (BuildGeometry 1.229x; DrawText raster 1.385x), so geometry fill
-        // remains the closest-to-Skia WPF text path.
+        // NOTE on font weight: the geometry-fill text path renders slightly heavier than Skia's
+        // gamma-corrected, hinted glyph rasteriser at small sizes (a rasteriser difference, not a
+        // weight/font difference). This is inherent and does not affect SSIM; see the git history for
+        // the erosion experiment that was tried and removed.
 
         /// <summary>Build filled text geometry at a baseline origin using the selected backend.</summary>
         public static Geometry BuildGeometry(
@@ -77,19 +70,20 @@ namespace WpfZpl.Text
             GlyphRun? run = BuildRun(gt, text, emSize, baselineOrigin);
             if (run == null)
             {
-                return Geometry.Empty;
+                return Compat.EmptyGeometry;
             }
 
-            return ApplyScaleX(run.BuildGeometry(), scaleX, baselineOrigin);
+            return ApplyScaleX(run.BuildGeometry() ?? Compat.EmptyGeometry, scaleX, baselineOrigin);
         }
 
         public static Geometry BuildGeometryFormattedText(Typeface tf, string text, double emSize, double scaleX, Point baselineOrigin)
         {
             if (string.IsNullOrEmpty(text))
             {
-                return Geometry.Empty;
+                return Compat.EmptyGeometry;
             }
 
+#if WPF
             var ft = new FormattedText(
                 text,
                 CultureInfo.InvariantCulture,
@@ -98,10 +92,19 @@ namespace WpfZpl.Text
                 emSize,
                 Brushes.Black,
                 1.0);
+#elif AVALONIA
+            var ft = new FormattedText(
+                text,
+                CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                tf,
+                emSize,
+                Brushes.Black);
+#endif
 
             // FormattedText draws top-left; convert to baseline by lifting the top by the font ascent.
             var topLeft = new Point(baselineOrigin.X, baselineOrigin.Y - ft.Baseline);
-            return ApplyScaleX(ft.BuildGeometry(topLeft), scaleX, baselineOrigin);
+            return ApplyScaleX(ft.BuildGeometry(topLeft) ?? Compat.EmptyGeometry, scaleX, baselineOrigin);
         }
 
         private static Geometry ApplyScaleX(Geometry geo, double scaleX, Point baselineOrigin)
@@ -111,14 +114,16 @@ namespace WpfZpl.Text
                 return geo;
             }
 
-            var scale = new ScaleTransform(scaleX, 1.0, baselineOrigin.X, baselineOrigin.Y);
+            Transform scale = Compat.HorizontalScale(scaleX, baselineOrigin);
 
+#if WPF
             // BuildGeometry() may return a frozen geometry — wrap rather than mutate when needed.
             if (!geo.IsFrozen && (geo.Transform == null || geo.Transform.Value.IsIdentity))
             {
                 geo.Transform = scale;
                 return geo;
             }
+#endif
 
             var group = new GeometryGroup();
             group.Children.Add(geo);
@@ -134,12 +139,16 @@ namespace WpfZpl.Text
             }
 
             var indices = new List<ushort>(text.Length);
-            var advances = new List<double>(text.Length);
             foreach (char c in text)
             {
-                ushort gi = gt.CharacterToGlyphMap.TryGetValue(c, out ushort g) ? g : (ushort)0;
-                indices.Add(gi);
-                advances.Add(gt.AdvanceWidths[gi] * emSize);
+                indices.Add(Compat.GlyphIndex(gt, c));
+            }
+
+#if WPF
+            var advances = new List<double>(text.Length);
+            foreach (ushort gi in indices)
+            {
+                advances.Add(Compat.GlyphAdvanceEm(gt, gi) * emSize);
             }
 
             return new GlyphRun(
@@ -157,6 +166,14 @@ namespace WpfZpl.Text
                 clusterMap: null,
                 caretStops: null,
                 language: null);
+#elif AVALONIA
+            // Avalonia derives per-glyph advances from the font (correct for our monospace pixel fonts
+            // and for system fonts alike), so only the indices and baseline origin are supplied.
+            return new GlyphRun(gt, emSize, text.AsMemory(), indices)
+            {
+                BaselineOrigin = baselineOrigin,
+            };
+#endif
         }
     }
 }

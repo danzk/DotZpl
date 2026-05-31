@@ -1,5 +1,3 @@
-using System.Windows;
-using System.Windows.Media;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
@@ -52,17 +50,19 @@ namespace WpfZpl.ElementDrawers
             {
                 if (graphicLine.RightLeaningDiagonal)
                 {
-                    ctx.BeginFigure(new Point(x, y + height), true, true);
-                    ctx.LineTo(new Point(x + border, y + height), false, false);
-                    ctx.LineTo(new Point(x + border + width, y), false, false);
-                    ctx.LineTo(new Point(x + width, y), false, false);
+                    ctx.Begin(new Point(x, y + height));
+                    ctx.Line(new Point(x + border, y + height));
+                    ctx.Line(new Point(x + border + width, y));
+                    ctx.Line(new Point(x + width, y));
+                    ctx.End();
                 }
                 else
                 {
-                    ctx.BeginFigure(new Point(x, y), true, true);
-                    ctx.LineTo(new Point(x + border, y), false, false);
-                    ctx.LineTo(new Point(x + border + width, y + height), false, false);
-                    ctx.LineTo(new Point(x + width, y + height), false, false);
+                    ctx.Begin(new Point(x, y));
+                    ctx.Line(new Point(x + border, y));
+                    ctx.Line(new Point(x + border + width, y + height));
+                    ctx.Line(new Point(x + width, y + height));
+                    ctx.End();
                 }
             }
 

@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Media;
 
 using BinaryKits.Zpl.Label.Elements;
 using BinaryKits.Zpl.Viewer;

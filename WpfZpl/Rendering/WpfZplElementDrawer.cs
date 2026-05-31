@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
@@ -83,20 +80,28 @@ namespace WpfZpl.Rendering
                 BuildContent(elements, width, height, printDensityDpmm);
 
             var group = new DrawingGroup();
+#if WPF
+            // Aliased edge mode is an attached property on the Drawing in WPF; on Avalonia it is applied
+            // at rasterisation time (see Compat.RenderToPng) since it attaches to a Visual, not a Drawing.
             if (!_options.Antialias)
             {
                 RenderOptions.SetEdgeMode(group, EdgeMode.Aliased);
             }
+#endif
 
             using (DrawingContext dc = group.Open())
             {
                 RenderContent(dc, width, height, background, whiteRegion, images);
             }
 
+#if WPF
+            // WPF Drawings are Freezable; freezing makes the vector content immutable and cheaper to
+            // reuse. Avalonia has no Freezable, so the group is returned as-is.
             if (group.CanFreeze)
             {
                 group.Freeze();
             }
+#endif
 
             return group;
         }
@@ -131,21 +136,7 @@ namespace WpfZpl.Rendering
         {
             (int width, int height) = LabelSize(labelWidth, labelHeight, printDensityDpmm);
             DrawingGroup drawing = CreateDrawing(elements, labelWidth, labelHeight, printDensityDpmm);
-
-            var visual = new DrawingVisual();
-            using (DrawingContext dc = visual.RenderOpen())
-            {
-                dc.DrawDrawing(drawing);
-            }
-
-            var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            rtb.Render(visual);
-
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(rtb));
-            using var ms = new MemoryStream();
-            encoder.Save(ms);
-            return ms.ToArray();
+            return Compat.RenderToPng(drawing, width, height, _options.Antialias);
         }
 
         private static (int width, int height) LabelSize(double labelWidth, double labelHeight, int printDensityDpmm)
@@ -247,17 +238,16 @@ namespace WpfZpl.Rendering
 
             foreach (WpfImageOp op in images)
             {
-                bool pushed = op.Transform != null && op.Transform != Transform.Identity;
-                if (pushed)
+                if (op.Transform.IsIdentity)
                 {
-                    dc.PushTransform(op.Transform);
+                    dc.DrawImage(op.Image, op.Destination);
                 }
-
-                dc.DrawImage(op.Image, op.Destination);
-
-                if (pushed)
+                else
                 {
-                    dc.Pop();
+                    using (dc.PushTransform(op.Transform))
+                    {
+                        dc.DrawImage(op.Image, op.Destination);
+                    }
                 }
             }
         }

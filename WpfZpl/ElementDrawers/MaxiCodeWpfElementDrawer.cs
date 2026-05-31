@@ -1,8 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Media;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
@@ -113,8 +111,9 @@ namespace WpfZpl.ElementDrawers
             int width = (int)Math.Ceiling(L + X - gX);
             int height = (int)Math.Ceiling(H + V - gV);
 
-            // Hexagons
-            var hexes = new StreamGeometry { FillRule = FillRule.Nonzero };
+            // Hexagons. The modules do not overlap, so the fill rule is immaterial within this geometry
+            // (Avalonia's StreamGeometry has no FillRule property; the enclosing group sets non-zero).
+            var hexes = new StreamGeometry();
             using (StreamGeometryContext ctx = hexes.Open())
             {
                 IEnumerator dataEnum = data.GetEnumerator();
@@ -129,12 +128,14 @@ namespace WpfZpl.ElementDrawers
                         }
 
                         var cur = new Point(i * W + j % 2 * xoff, j * Y + yoff);
-                        ctx.BeginFigure(cur, true, true);
+                        ctx.Begin(cur);
                         foreach (Vector delta in pattern)
                         {
                             cur += delta;
-                            ctx.LineTo(cur, false, false);
+                            ctx.Line(cur);
                         }
+
+                        ctx.End();
                     }
                 }
             }
@@ -144,7 +145,7 @@ namespace WpfZpl.ElementDrawers
             double finderY = 16 * Y + (V - gV) / 2;
             var center = new Point(finderX, finderY);
 
-            var group = new GeometryGroup { FillRule = FillRule.Nonzero };
+            var group = new GeometryGroup { FillRule = Compat.NonZeroFill };
             group.Children.Add(hexes);
             group.Children.Add(Annulus(center, r2, r1));
             group.Children.Add(Annulus(center, r4, r3));
@@ -155,8 +156,8 @@ namespace WpfZpl.ElementDrawers
 
         private static Geometry Annulus(Point center, double outerRadius, double innerRadius)
         {
-            var outer = new EllipseGeometry(center, outerRadius, outerRadius);
-            var inner = new EllipseGeometry(center, innerRadius, innerRadius);
+            var outer = Compat.Ellipse(center, outerRadius, outerRadius);
+            var inner = Compat.Ellipse(center, innerRadius, innerRadius);
             return new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
         }
     }

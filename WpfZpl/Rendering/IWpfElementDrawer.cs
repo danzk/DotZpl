@@ -1,4 +1,3 @@
-using System.Windows;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;

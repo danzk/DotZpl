@@ -1,14 +1,31 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
+    <TargetFrameworks>net10.0-windows;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>WpfZpl</RootNamespace>
     <AssemblyName>WpfZpl</AssemblyName>
   </PropertyGroup>
 
+  <!-- WPF target -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <UseWPF>true</UseWPF>
+    <DefineConstants>$(DefineConstants);WPF</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Avalonia target (cross-platform). The WPF FrameworkElement control is excluded. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <DefineConstants>$(DefineConstants);AVALONIA</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Avalonia" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Skia" Version="12.0.4" />
+    <Compile Remove="Controls\**\*.cs" />
+  </ItemGroup>
+
+  <!-- Embedded fonts: WPF loads them from a spilled temp file via GlyphTypeface(Uri); Avalonia loads
+       them as avares:// resources via Typeface/FontFamily. They are registered both ways. -->
   <ItemGroup>
     <EmbeddedResource Include="Resources\ZplGS.ttf">
       <LogicalName>WpfZpl.ZplGS.ttf</LogicalName>
@@ -22,6 +39,9 @@
     <EmbeddedResource Include="Resources\font-c.ttf">
       <LogicalName>WpfZpl.font-c.ttf</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <AvaloniaResource Include="Resources\*.ttf" />
   </ItemGroup>
 
   <ItemGroup>

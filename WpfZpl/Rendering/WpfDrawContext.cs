@@ -1,17 +1,14 @@
 using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace WpfZpl.Rendering
 {
     /// <summary>
     /// A single image draw operation (for <c>^GF</c> / <c>^XG</c> / <c>~DG</c> elements that
-    /// have no geometry equivalent).
+    /// have no geometry equivalent). The transform is a baked <see cref="Matrix"/> (framework-neutral).
     /// </summary>
     public readonly struct WpfImageOp
     {
-        public WpfImageOp(BitmapSource image, Rect destination, Transform transform)
+        public WpfImageOp(BitmapSource image, Rect destination, Matrix transform)
         {
             Image = image;
             Destination = destination;
@@ -20,7 +17,7 @@ namespace WpfZpl.Rendering
 
         public BitmapSource Image { get; }
         public Rect Destination { get; }
-        public Transform Transform { get; }
+        public Matrix Transform { get; }
     }
 
     /// <summary>
@@ -47,17 +44,11 @@ namespace WpfZpl.Rendering
         public int PixelWidth { get; }
         public int PixelHeight { get; }
 
-        /// <summary>The composed transform currently in effect (innermost push applied first).</summary>
-        public Transform CurrentTransform =>
-            _current.IsIdentity ? Transform.Identity : new MatrixTransform(_current);
-
         /// <summary>Push a transform; mirrors <c>SKCanvas.Concat(matrix)</c>.</summary>
         public void PushTransform(Transform t)
         {
             _transformStack.Push(_current);
-            Matrix m = _current;
-            m.Prepend(t.Value); // t becomes innermost (applied first to geometry coordinates)
-            _current = m;
+            _current = Compat.Prepend(_current, t.Value); // t becomes innermost (applied first)
         }
 
         /// <summary>Pop the most recently pushed transform; mirrors leaving an <c>SKAutoCanvasRestore</c> scope.</summary>
@@ -69,7 +60,7 @@ namespace WpfZpl.Rendering
         /// <summary>Add a black (foreground) geometry, baking in the current transform.</summary>
         public void AddBlack(Geometry g)
         {
-            if (ReferenceEquals(g, Geometry.Empty))
+            if (ReferenceEquals(g, Compat.EmptyGeometry))
             {
                 return;
             }
@@ -80,7 +71,7 @@ namespace WpfZpl.Rendering
         /// <summary>Add an explicit white geometry (e.g. <c>^GB...,W</c> without <c>^FR</c>).</summary>
         public void AddWhite(Geometry g)
         {
-            if (ReferenceEquals(g, Geometry.Empty))
+            if (ReferenceEquals(g, Compat.EmptyGeometry))
             {
                 return;
             }
@@ -91,7 +82,7 @@ namespace WpfZpl.Rendering
         /// <summary>Add a raster image draw operation, baking in the current transform.</summary>
         public void AddImage(BitmapSource image, Rect destination)
         {
-            _images.Add(new WpfImageOp(image, destination, CurrentTransform));
+            _images.Add(new WpfImageOp(image, destination, _current));
         }
 
         private Geometry ApplyCurrent(Geometry g)
@@ -103,14 +94,16 @@ namespace WpfZpl.Rendering
 
             var ct = new MatrixTransform(_current);
 
+#if WPF
             // Fast path: a mutable geometry with no transform of its own takes the transform directly.
             if (!g.IsFrozen && (g.Transform == null || g.Transform.Value.IsIdentity))
             {
                 g.Transform = ct;
                 return g;
             }
+#endif
 
-            // Frozen (e.g. Geometry.Empty) or already-transformed (e.g. scaleX): wrap without mutating.
+            // Frozen / already-transformed (e.g. scaleX), or Avalonia (no freezing): wrap without mutating.
             // The wrapper applies the inner transform first, then the current one (rotation).
             var group = new GeometryGroup();
             group.Children.Add(g);
@@ -153,7 +146,7 @@ namespace WpfZpl.Rendering
             }
             else
             {
-                var group = new GeometryGroup { FillRule = FillRule.Nonzero };
+                var group = new GeometryGroup { FillRule = Compat.NonZeroFill };
                 foreach (Geometry g in parts)
                 {
                     group.Children.Add(g);

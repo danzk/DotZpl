@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows;
-using System.Windows.Media;
 
 using BinaryKits.Zpl.Label;
 
@@ -84,10 +82,11 @@ namespace WpfZpl.Rendering
 
         private static void AddRect(StreamGeometryContext ctx, double x, double y, double w, double h)
         {
-            ctx.BeginFigure(new Point(x, y), true, true);
-            ctx.LineTo(new Point(x + w, y), false, false);
-            ctx.LineTo(new Point(x + w, y + h), false, false);
-            ctx.LineTo(new Point(x, y + h), false, false);
+            ctx.Begin(new Point(x, y));
+            ctx.Line(new Point(x + w, y));
+            ctx.Line(new Point(x + w, y + h));
+            ctx.Line(new Point(x, y + h));
+            ctx.End();
         }
 
         /// <summary>Rotation transform mirroring <c>BarcodeDrawerBase.GetRotationMatrix</c>.</summary>

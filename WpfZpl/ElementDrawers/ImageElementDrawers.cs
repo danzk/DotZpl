@@ -1,7 +1,3 @@
-using System.IO;
-using System.Windows;
-using System.Windows.Media.Imaging;
-
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
 using BinaryKits.Zpl.Label.Helpers;
@@ -12,17 +8,7 @@ namespace WpfZpl.ElementDrawers
 {
     internal static class ImageDecoder
     {
-        public static BitmapSource? Decode(byte[] data)
-        {
-            if (data == null || data.Length == 0)
-            {
-                return null;
-            }
-
-            using var ms = new MemoryStream(data);
-            BitmapDecoder decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            return decoder.Frames[0];
-        }
+        public static BitmapSource? Decode(byte[] data) => Compat.DecodeImage(data);
     }
 
     /// <summary>WPF port of <c>GraphicFieldElementDrawer</c> (<c>^GF</c>). Image kept as a raster.</summary>
@@ -54,12 +40,12 @@ namespace WpfZpl.ElementDrawers
 
             if (graphicField.FieldTypeset != null)
             {
-                y -= image.PixelHeight;
+                y -= Compat.PixelHeight(image);
                 if (y < 0) y = 0;
             }
 
-            context.AddImage(image, new Rect(x, y, image.PixelWidth, image.PixelHeight));
-            return CalculateNextDefaultPosition(x, y, image.PixelWidth, image.PixelHeight, graphicField.FieldOrigin != null, FieldOrientation.Normal, currentPosition);
+            context.AddImage(image, new Rect(x, y, Compat.PixelWidth(image), Compat.PixelHeight(image)));
+            return CalculateNextDefaultPosition(x, y, Compat.PixelWidth(image), Compat.PixelHeight(image), graphicField.FieldOrigin != null, FieldOrientation.Normal, currentPosition);
         }
     }
 
@@ -92,12 +78,12 @@ namespace WpfZpl.ElementDrawers
 
             if (imageMove.FieldTypeset != null)
             {
-                y -= image.PixelHeight;
+                y -= Compat.PixelHeight(image);
                 if (y < 0) y = 0;
             }
 
-            context.AddImage(image, new Rect(x, y, image.PixelWidth, image.PixelHeight));
-            return CalculateNextDefaultPosition(x, y, image.PixelWidth, image.PixelHeight, imageMove.FieldOrigin != null, FieldOrientation.Normal, currentPosition);
+            context.AddImage(image, new Rect(x, y, Compat.PixelWidth(image), Compat.PixelHeight(image)));
+            return CalculateNextDefaultPosition(x, y, Compat.PixelWidth(image), Compat.PixelHeight(image), imageMove.FieldOrigin != null, FieldOrientation.Normal, currentPosition);
         }
     }
 
@@ -130,12 +116,12 @@ namespace WpfZpl.ElementDrawers
 
             if (recallGraphic.FieldTypeset != null)
             {
-                y -= image.PixelHeight;
+                y -= Compat.PixelHeight(image);
                 if (y < 0) y = 0;
             }
 
-            context.AddImage(image, new Rect(x, y, image.PixelWidth, image.PixelHeight));
-            return CalculateNextDefaultPosition(x, y, image.PixelWidth, image.PixelHeight, recallGraphic.FieldOrigin != null, FieldOrientation.Normal, currentPosition);
+            context.AddImage(image, new Rect(x, y, Compat.PixelWidth(image), Compat.PixelHeight(image)));
+            return CalculateNextDefaultPosition(x, y, Compat.PixelWidth(image), Compat.PixelHeight(image), recallGraphic.FieldOrigin != null, FieldOrientation.Normal, currentPosition);
         }
     }
 }

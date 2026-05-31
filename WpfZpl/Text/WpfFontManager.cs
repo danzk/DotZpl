@@ -4,8 +4,6 @@ using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
-using System.Windows;
-using System.Windows.Media;
 
 namespace WpfZpl.Text
 {
@@ -56,16 +54,16 @@ namespace WpfZpl.Text
         internal Typeface TypefaceA => _typefaceA ??= ResolveTypeface("A");
         internal GlyphTypeface Glyph0 => _glyph0 ??= ToGlyph(Typeface0);
         internal GlyphTypeface GlyphA => _glyphA ??= ToGlyph(TypefaceA);
-        internal GlyphTypeface GlyphGS => _glyphGs ??= LoadEmbedded("WpfZpl.ZplGS.ttf", "WpfZpl_ZplGS.ttf");
+        internal GlyphTypeface GlyphGS => _glyphGs ??= LoadEmbedded("WpfZpl.ZplGS.ttf", "WpfZpl_ZplGS.ttf", "ZplGS.ttf", "ZPL GS");
 
         /// <summary>Embedded pixel font matching Zebra Font A (9 x 5 dot matrix).</summary>
-        public GlyphTypeface GlyphFontA => _glyphFontA ??= LoadEmbedded("WpfZpl.font-a.ttf", "WpfZpl_font-a.ttf");
+        public GlyphTypeface GlyphFontA => _glyphFontA ??= LoadEmbedded("WpfZpl.font-a.ttf", "WpfZpl_font-a.ttf", "font-a.ttf", "ZPL Font A");
 
         /// <summary>Embedded pixel font matching Zebra Font B (11 x 7 dot matrix; bold, caps-only).</summary>
-        public GlyphTypeface GlyphFontB => _glyphFontB ??= LoadEmbedded("WpfZpl.font-b.ttf", "WpfZpl_font-b.ttf");
+        public GlyphTypeface GlyphFontB => _glyphFontB ??= LoadEmbedded("WpfZpl.font-b.ttf", "WpfZpl_font-b.ttf", "font-b.ttf", "ZPL Font B");
 
         /// <summary>Embedded pixel font matching Zebra Font C/D (18 x 10 dot matrix).</summary>
-        public GlyphTypeface GlyphFontC => _glyphFontC ??= LoadEmbedded("WpfZpl.font-c.ttf", "WpfZpl_font-c.ttf");
+        public GlyphTypeface GlyphFontC => _glyphFontC ??= LoadEmbedded("WpfZpl.font-c.ttf", "WpfZpl_font-c.ttf", "font-c.ttf", "ZPL Font C");
 
         /// <summary>
         /// Whether a ZPL font name is rendered with an embedded fixed-cell pixel font (which is sized
@@ -103,20 +101,29 @@ namespace WpfZpl.Text
             List<string> stack = fontType == "0" ? FontStack0 : FontStackA;
 
             // Mirror Skia's font styles: "0" => Bold / SemiCondensed, "A" => Normal / Normal.
+            // WPF spells these as static members of struct types; Avalonia as enum members.
+#if WPF
             (FontWeight weight, FontStretch stretch) = fontType == "0"
                 ? (FontWeights.Bold, FontStretches.SemiCondensed)
                 : (FontWeights.Normal, FontStretches.Normal);
+            FontStyle style = FontStyles.Normal;
+#elif AVALONIA
+            (FontWeight weight, FontStretch stretch) = fontType == "0"
+                ? (FontWeight.Bold, FontStretch.SemiCondensed)
+                : (FontWeight.Normal, FontStretch.Normal);
+            FontStyle style = FontStyle.Normal;
+#endif
 
             foreach (string family in stack)
             {
-                var typeface = new Typeface(new FontFamily(family), FontStyles.Normal, weight, stretch);
-                if (typeface.TryGetGlyphTypeface(out _))
+                var typeface = new Typeface(new FontFamily(family), style, weight, stretch);
+                if (Compat.TryResolve(typeface))
                 {
                     return typeface;
                 }
             }
 
-            return new Typeface(new FontFamily("Arial"), FontStyles.Normal, weight, stretch);
+            return new Typeface(new FontFamily("Arial"), style, weight, stretch);
         }
 
         /// <summary>
@@ -149,16 +156,27 @@ namespace WpfZpl.Text
 
         private static GlyphTypeface ToGlyph(Typeface typeface)
         {
+#if WPF
             if (typeface.TryGetGlyphTypeface(out GlyphTypeface gt))
             {
                 return gt;
             }
 
             throw new InvalidOperationException($"No GlyphTypeface for typeface '{typeface.FontFamily}'.");
+#elif AVALONIA
+            return typeface.GlyphTypeface;
+#endif
         }
 
-        private static GlyphTypeface LoadEmbedded(string logicalName, string tempFileName)
+        // <paramref name="logicalName"/>/<paramref name="tempFileName"/> are used by WPF (spill an embedded
+        // resource to a temp file for GlyphTypeface(Uri)); <paramref name="avaresName"/>/<paramref name="familyName"/>
+        // are used by Avalonia (load the avares:// font resource by family name).
+        private static GlyphTypeface LoadEmbedded(string logicalName, string tempFileName, string avaresName, string familyName)
         {
+#if AVALONIA
+            var family = new FontFamily($"avares://WpfZpl/Resources/{avaresName}#{familyName}");
+            return new Typeface(family).GlyphTypeface;
+#elif WPF
             Assembly assembly = typeof(WpfFontManager).Assembly;
             using Stream? stream = assembly.GetManifestResourceStream(logicalName)
                 ?? throw new InvalidOperationException($"Embedded font resource '{logicalName}' not found.");
@@ -198,6 +216,7 @@ namespace WpfZpl.Text
             }
 
             return new GlyphTypeface(new Uri(path));
+#endif
         }
     }
 }

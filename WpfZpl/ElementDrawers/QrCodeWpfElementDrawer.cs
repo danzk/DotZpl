@@ -1,6 +1,4 @@
 using System.Text.RegularExpressions;
-using System.Windows;
-using System.Windows.Media;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;

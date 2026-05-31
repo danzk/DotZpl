@@ -1,5 +1,3 @@
-using System.Windows;
-using System.Windows.Media;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
@@ -46,7 +44,7 @@ namespace WpfZpl.ElementDrawers
             }
 
             var center = new Point(x + width / 2.0, y + height / 2.0);
-            var outer = new EllipseGeometry(center, width / 2.0, height / 2.0);
+            var outer = Compat.Ellipse(center, width / 2.0, height / 2.0);
 
             Geometry borderGeometry;
             double innerRx = width / 2.0 - border;
@@ -57,7 +55,7 @@ namespace WpfZpl.ElementDrawers
             }
             else
             {
-                var inner = new EllipseGeometry(center, innerRx, innerRy);
+                var inner = Compat.Ellipse(center, innerRx, innerRy);
                 borderGeometry = new CombinedGeometry(GeometryCombineMode.Xor, outer, inner);
             }
 
