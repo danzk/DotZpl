@@ -30,10 +30,13 @@ def build_glyph(rows, baseline, g=UNITS_PER_DOT):
         for c, ch in enumerate(row):
             if ch == pixfont.ON:
                 x0, x1 = c * g, (c + 1) * g
+                # Wind each square CLOCKWISE in font (y-up) space — the TrueType "filled" convention.
+                # A strict glyf rasteriser (Skia/FreeType, used by Avalonia) renders counter-clockwise
+                # contours as holes, so the glyph would fill empty; WPF fills either winding.
                 pen.moveTo((x0, y_bot))      # one square per dot (merged later)
-                pen.lineTo((x1, y_bot))
-                pen.lineTo((x1, y_top))
                 pen.lineTo((x0, y_top))
+                pen.lineTo((x1, y_top))
+                pen.lineTo((x1, y_bot))
                 pen.closePath()
     return pen.glyph()
 
