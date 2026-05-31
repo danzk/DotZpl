@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Media;
@@ -162,15 +163,37 @@ namespace WpfZpl.Text
             using Stream? stream = assembly.GetManifestResourceStream(logicalName)
                 ?? throw new InvalidOperationException($"Embedded font resource '{logicalName}' not found.");
 
-            // GlyphTypeface can only be constructed from a URI, so spill the font to a stable temp file.
-            string path = Path.Combine(Path.GetTempPath(), tempFileName);
+            byte[] bytes;
             using (var ms = new MemoryStream())
             {
                 stream.CopyTo(ms);
-                byte[] bytes = ms.ToArray();
-                if (!File.Exists(path) || new FileInfo(path).Length != bytes.Length)
+                bytes = ms.ToArray();
+            }
+
+            // GlyphTypeface can only be constructed from a URI, so spill the font to a temp file. Make the
+            // file name content-addressed (a hash of the bytes): an edit that doesn't change the byte count
+            // — e.g. re-centring glyphs — must still invalidate the cache, which a length check would miss.
+            string hash = Convert.ToHexString(SHA256.HashData(bytes))[..16];
+            string name = $"{Path.GetFileNameWithoutExtension(tempFileName)}.{hash}{Path.GetExtension(tempFileName)}";
+            string path = Path.Combine(Path.GetTempPath(), name);
+            if (!File.Exists(path))
+            {
+                // Write to a unique sibling then move into place, so concurrent loaders (e.g. parallel
+                // STA tests, or a multi-threaded host) never read a half-written file or collide on the
+                // same write. A content-addressed name means an existing file is already the right bytes.
+                string tmp = $"{path}.{Guid.NewGuid():N}.tmp";
+                File.WriteAllBytes(tmp, bytes);
+                try
                 {
-                    File.WriteAllBytes(path, bytes);
+                    File.Move(tmp, path);
+                }
+                catch (IOException)
+                {
+                    // Another loader created it first — use theirs.
+                }
+                finally
+                {
+                    if (File.Exists(tmp)) File.Delete(tmp);
                 }
             }
 
