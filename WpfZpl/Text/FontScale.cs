@@ -116,8 +116,12 @@ namespace WpfZpl.Text
 
         private static readonly (int height, int width) defaultScalingFontScale = (15, 12);
 
-        // This is a corrective used to match labelary.com scale for text fields' font size
-        private const float heightScale = 1.1f;
+        // Bitmap/fixed fonts (A-H, GS, ...) render at exact integer multiples of their cell — the
+        // size is base_cell × magnification, never an arbitrary dot value (e.g. ^AD,52 and ^AD,54
+        // both give 3× = 54 dots). The old ×1.1 "labelary correction" oversized them ~10% and broke
+        // that exactness; it was tuned for substituting a vector font for a bitmap one. With the
+        // embedded pixel fonts (and to render the fixed fonts faithfully) the correction is dropped.
+        private const float heightScale = 1.0f;
 
         public static float? GetBitmappedFontSize(string fontName, int scalingFactor, int printDensityDpmm)
         {
@@ -125,11 +129,10 @@ namespace WpfZpl.Text
         }
 
         /// <summary>
-        /// Em size for an embedded pixel font whose em square equals the matrix cell height. Returns
-        /// the same scaling as <see cref="GetFontScaling"/> but without the labelary ×1.1 height
-        /// correction (which is tuned for the system fallback fonts), so the cell renders at exactly the
-        /// requested dot height. Pixel fonts are always in the scale table, so the correction is always
-        /// applied and can be divided back out cleanly.
+        /// Em size for an embedded pixel font whose em square equals the matrix cell height. Now that
+        /// <see cref="heightScale"/> is 1.0 this is identical to <see cref="GetFontScaling"/> (the em is
+        /// already an exact integer multiple of the cell); it is kept as the explicit entry point for the
+        /// pixel-font drawers, and so the division stays correct if a correction is ever reintroduced.
         /// </summary>
         public static (float fontSize, float scaleX) GetPixelFontScaling(string fontName, int fontHeight, int fontWidth, int printDensityDpmm)
         {
@@ -143,22 +146,17 @@ namespace WpfZpl.Text
 
             if (fontScale != null)
             {
+                // Bitmap/fixed fonts (in the scale table) magnify by a SINGLE uniform integer factor —
+                // unlike the scalable font "0" they cannot be stretched/condensed by independent height
+                // and width values (if they could, the bitmap-vs-scalable distinction would be pointless).
+                // The height parameter selects the magnification when present; otherwise the width does.
+                // scaleX therefore stays 1.0, so e.g. ^AAN,20,20 renders 2x (uniform), never 2x tall x 4x wide.
                 (int height, int width) = fontScale.Value;
                 if (fontHeight > 0)
                 {
                     double heightRatio = (double)fontHeight / height;
                     int intHeightRatio = (int)Math.Max(1, Math.Round(heightRatio));
-                    float emSize = height * intHeightRatio * heightScale;
-
-                    if (fontWidth == 0)
-                    {
-                        return (emSize, 1.0f);
-                    }
-
-                    double widthRatio = (double)fontWidth / width;
-                    int intWidthRatio = (int)Math.Max(1, Math.Round(widthRatio));
-
-                    return (emSize, (float)intWidthRatio / intHeightRatio);
+                    return (height * intHeightRatio * heightScale, 1.0f);
                 }
                 else if (fontWidth > 0)
                 {
