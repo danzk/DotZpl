@@ -1,0 +1,3 @@
+[submodule "BinaryKits.Zpl"]
+	path = BinaryKits.Zpl
+	url = https://github.com/danzk/BinaryKits.Zpl.git
