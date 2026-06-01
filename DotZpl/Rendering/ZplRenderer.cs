@@ -232,15 +232,15 @@ namespace DotZpl.Rendering
         /// <para><b>WPF:</b> uses a flat <see cref="GeometryGroup"/> with NonZero fill rather than
         /// nesting another <see cref="CombinedGeometry"/> — the boolean Union evaluator is wasted
         /// work for the common case of non-overlapping label elements, and WPF correctly flattens
-        /// child geometries' path data so children with their own holes (a CombinedGeometry border
-        /// ring, a multi-figure text glyph) keep them under the group's FillRule.</para>
+        /// child geometries' path data so children with their own holes (a MakeRing border, a
+        /// multi-figure text glyph) keep them under the group's FillRule.</para>
         ///
-        /// <para><b>Avalonia:</b> stays with <see cref="CombinedGeometry"/>. Avalonia 12's
-        /// GeometryGroup rasterises each child as an independently-filled shape and unions the
-        /// painted regions; a child's own holes (CombinedGeometry's Boolean op, a glyph path's
-        /// reverse-winding sub-figures) are lost, so a hollow GraphicBox border or the inside of
-        /// the letter 'o' re-fills. Until Avalonia's rasteriser flattens children the same way WPF
-        /// does, the safe path is the boolean Union — slower but correct.</para>
+        /// <para><b>Avalonia:</b> stays with <see cref="CombinedGeometry"/>. When an Avalonia
+        /// <see cref="GeometryGroup"/> wraps children whose own holes come from FillRule (a
+        /// MakeRing GeometryGroup, a multi-figure glyph PathGeometry), the outer group loses
+        /// those holes — Avalonia's rasteriser unions the children's painted regions rather than
+        /// flattening their contours through the outer FillRule. CombinedGeometry(Union, …) is
+        /// slower at render but preserves correctness.</para>
         /// </summary>
         private static Geometry? Union(Geometry? a, Geometry? b)
         {
