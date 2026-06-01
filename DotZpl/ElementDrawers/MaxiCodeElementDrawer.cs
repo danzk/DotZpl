@@ -12,9 +12,17 @@ using DotZpl.Rendering;
 namespace DotZpl.ElementDrawers
 {
     /// <summary>
-    /// WPF port of <c>MaxiCodeElementDrawer</c> (<c>^BD</c>). MaxiCode is not in ZXing; the hexagon
+    /// Port of <c>MaxiCodeElementDrawer</c> (<c>^BD</c>). MaxiCode is not in ZXing; the hexagon
     /// pattern + three concentric finder rings are reproduced as <see cref="Geometry"/> (the Skia
     /// SKPath approach), mirroring the ISO/IEC 16023 dimensions exactly.
+    ///
+    /// <para><b>Known parity gap (~3% pixels):</b> the geometry math is byte-identical to Skia's,
+    /// but the two backends rasterise the same non-axis-aligned hexagons (and Bézier-approximated
+    /// finder rings) through different aliased scan converters, so every hexagon ends up a sub-pixel
+    /// silhouette apart. Closing the gap would require bypassing the WPF/Avalonia rasteriser
+    /// entirely (custom scan conversion into a <c>WriteableBitmap</c>). Skia itself doesn't match
+    /// Labelary closely either, so neither backend is pixel-accurate ground truth; the SSIM gate
+    /// (≥ 0.85, currently ~0.98) is what we hold the line on.</para>
     /// </summary>
     public class MaxiCodeElementDrawer : BarcodeDrawerBase
     {

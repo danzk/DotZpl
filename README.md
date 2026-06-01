@@ -31,16 +31,18 @@ DotZpl/                     rendering library, multi-targeted (net10.0-windows +
   Rendering/               orchestrator, draw context, drawer base classes, options
   Text/                    GlyphRun-based text renderer + font manager
   ElementDrawers/          one drawer per ZPL element type
-  Controls/                WPF FrameworkElement (ZplLabelView) — net10.0-windows only
+  Controls/                ZplLabelView — one file per UI framework, conditionally compiled
   Resources/               embedded ZplGS + pixel fonts (font-a/b/c.ttf)
   Compat.cs                cross-framework helpers (WPF vs Avalonia API-shape differences)
-DotZpl.Viewer/             native WPF MVVM viewer app (ports the WebApi web UI)
+DotZpl.Viewer.Shared/      MVVM view-models + platform-service interfaces (multi-targeted)
+DotZpl.Viewer/             WPF viewer app (consumes Shared via WPF dispatcher/dialog impls)
+DotZpl.Viewer.Avalonia/    Avalonia viewer app (consumes Shared via Avalonia impls)
 DotZpl.UnitTest/           MSTest suite: Skia-vs-WPF image comparison
   Support/                 render harness, comparer (SSIM/pixel), STA runner
   Tests/                   one test class per element category
 DotZpl.Avalonia.SmokeTest/ headless Avalonia render smoke tests (xUnit v3)
 BinaryKits.Zpl/            git submodule (fork) — see split below
-DotZpl.slnx                solution (WPF projects only; the Avalonia smoke test is run separately)
+DotZpl.slnx                solution (the headless Avalonia smoke test is built separately)
 ```
 
 `BinaryKits.Zpl` is a **git submodule**. Its `Viewer` assembly originally bundled the ZPL parser
@@ -145,12 +147,18 @@ File.WriteAllBytes("label.png", png);
 | 2D barcodes | QR, Data Matrix, Aztec, PDF417, MaxiCode |
 | Images | `^GF` graphic field, `^IM` image move, `^XG` recall graphic, `~DG`/`~DY` downloads |
 
-## Viewer app
+## Viewer apps
 
-`DotZpl.Viewer` is a small WPF MVVM application that ports the WebApi's browser UI to the desktop:
-a Test/Example label browser, a ZPL editor with size/dpmm presets, whole-label rotation, a live
-preview (the `ZplLabelView` control), a non-supported-commands panel, and Save PNG / Save ZPL. Run it
-with `dotnet run --project DotZpl.Viewer`.
+A small MVVM application that ports the WebApi's browser UI to the desktop: a Test/Example label
+browser, a ZPL editor with size/dpmm presets, whole-label rotation, a live preview (the
+`ZplLabelView` control), a non-supported-commands panel, and Save PNG / Save ZPL. Ships in two
+flavours sharing the same view-models (`DotZpl.Viewer.Shared`):
+
+- **WPF** — `dotnet run --project DotZpl.Viewer` (Windows only)
+- **Avalonia** — `dotnet run --project DotZpl.Viewer.Avalonia` (cross-platform)
+
+The shared project also defines `IDispatcher` and `IFileDialogService` so the MVVM layer doesn't
+take a platform dependency; each app wires up its native implementation at startup.
 
 ## Test harness & fidelity
 
@@ -160,9 +168,11 @@ backends and asserts a similarity threshold. For each case it writes a three-pan
 
 Typical parity against the Skia reference:
 
-- 2D barcodes and raster images: **pixel-perfect** (module-exact geometry)
+- QR, Data Matrix, Aztec, PDF417 and raster images: **pixel-perfect** (module-exact geometry)
 - 1D barcodes and vector shapes: **> 0.99**
 - Text: **~0.96–0.99 SSIM**
+- MaxiCode: **~0.97 pixel / ~0.98 SSIM** — the only barcode where two aliased rasterisers
+  disagree on non-axis-aligned hexagons; see `MaxiCodeElementDrawer` for the rationale
 - Full multi-element example labels: **~0.94–0.99**
 
 **Note on text weight:** both backends resolve to the *same* font files, but WPF's linear-coverage
