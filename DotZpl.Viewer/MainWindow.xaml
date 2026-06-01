@@ -67,7 +67,14 @@
 
                     <Button Content="Render" Command="{Binding RenderCommand}" Padding="12,3" Margin="0,0,6,0" />
                     <Button Content="Save PNG" Command="{Binding SavePngCommand}" Padding="12,3" Margin="0,0,6,0" />
-                    <Button Content="Save ZPL" Command="{Binding SaveZplCommand}" Padding="12,3" />
+                    <Button Content="Save ZPL" Command="{Binding SaveZplCommand}" Padding="12,3" Margin="0,0,14,0" />
+
+                    <Border Width="1" Background="#80808080" Margin="0,2,14,2" />
+                    <TextBlock Text="Printer:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox Text="{Binding PrinterAddress, UpdateSourceTrigger=PropertyChanged}" Width="130"
+                             VerticalAlignment="Center" ToolTip="Printer IP or host (optionally host:port; default 9100)" Margin="0,0,6,0" />
+                    <Button Content="Print" Command="{Binding PrintCommand}" Padding="12,3" Margin="0,0,10,0" />
+                    <TextBlock Text="{Binding PrintStatus}" VerticalAlignment="Center" Opacity="0.8" />
                 </WrapPanel>
             </Border>
 

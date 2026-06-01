@@ -63,10 +63,65 @@ namespace DotZpl.UnitTest
             Assert.AreEqual(edited, preview, "editing the ZPL should live-update the preview");
         }
 
+        [TestMethod]
+        public void Print_SendsCurrentZpl_ToConfiguredAddress()
+        {
+            var printer = new FakePrinter();
+
+            (string? host, int port, string? zpl, string? status) = StaRunner.Run(() =>
+            {
+                var vm = new MainViewModel(new TestDispatcher(), new NullFileDialogService(), printer);
+                vm.ZplText = "^XA^FO20,20^A0N,30,30^FDHi^FS^XZ";
+
+                Assert.IsFalse(vm.PrintCommand.CanExecute(null), "no address yet → print disabled");
+                vm.PrinterAddress = "192.168.0.50:9100";
+                Assert.IsTrue(vm.PrintCommand.CanExecute(null), "address set → print enabled");
+
+                vm.PrintCommand.Execute(null);                    // fake completes synchronously
+                return (printer.Host, printer.Port, printer.Zpl, vm.PrintStatus);
+            });
+
+            Assert.AreEqual("192.168.0.50", host, "host parsed from address");
+            Assert.AreEqual(9100, port, "explicit port parsed");
+            Assert.AreEqual("^XA^FO20,20^A0N,30,30^FDHi^FS^XZ", zpl, "the current ZPL is sent verbatim");
+            StringAssert.Contains(status, "Sent", $"success status expected (got '{status}')");
+        }
+
+        [TestMethod]
+        public void Print_DefaultsPortTo9100_WhenOmitted()
+        {
+            var printer = new FakePrinter();
+
+            int port = StaRunner.Run(() =>
+            {
+                var vm = new MainViewModel(new TestDispatcher(), new NullFileDialogService(), printer);
+                vm.PrinterAddress = "10.0.0.5";
+                vm.PrintCommand.Execute(null);
+                return printer.Port;
+            });
+
+            Assert.AreEqual(9100, port, "bare host should default to the raw-print port");
+        }
+
         /// <summary>Wires up the VM with WPF-flavoured test doubles: the dispatcher posts via the current
         /// STA thread's <see cref="Dispatcher"/>, and the save-file service refuses (returns null) so the
         /// VM never blocks a test on a real dialog.</summary>
         private static MainViewModel NewViewModel() => new(new TestDispatcher(), new NullFileDialogService());
+
+        private sealed class FakePrinter : IZplPrinterService
+        {
+            public string? Host { get; private set; }
+            public int Port { get; private set; }
+            public string? Zpl { get; private set; }
+
+            public Task SendAsync(string host, int port, string zpl, System.Threading.CancellationToken cancellationToken = default)
+            {
+                Host = host;
+                Port = port;
+                Zpl = zpl;
+                return Task.CompletedTask;
+            }
+        }
 
         private sealed class TestDispatcher : IDispatcher
         {
