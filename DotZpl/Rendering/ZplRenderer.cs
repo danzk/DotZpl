@@ -75,9 +75,8 @@ namespace DotZpl.Rendering
             int printDensityDpmm = 8)
         {
             (int width, int height) = LabelSize(labelWidth, labelHeight, printDensityDpmm);
-            (Geometry? background, Geometry? whiteRegion, List<ImageOp> images) =
-                BuildContent(elements, width, height, printDensityDpmm);
-            return new LabelDrawing(width, height, background, whiteRegion, images, _options.OpaqueBackground);
+            List<LabelOp> ops = BuildContent(elements, width, height, printDensityDpmm);
+            return new LabelDrawing(width, height, ops, _options.OpaqueBackground);
         }
 
 #if WPF
@@ -153,15 +152,32 @@ namespace DotZpl.Rendering
             return (Convert.ToInt32(labelWidth * printDensityDpmm), Convert.ToInt32(labelHeight * printDensityDpmm));
         }
 
-        /// <summary>Run the drawer pipeline, accumulating the black/white geometry regions and images.</summary>
-        private (Geometry? background, Geometry? whiteRegion, List<ImageOp> images) BuildContent(
+        /// <summary>
+        /// Run the drawer pipeline, emitting an ordered display list of fill / image ops. Drawing the
+        /// list in document order reproduces ZPL compositing by the painter's algorithm: additive
+        /// black unions visually (no boolean geometry, no winding cancellation), white over black
+        /// erases, images layer in order.
+        ///
+        /// <para>Field Reverse (<c>^FR</c>) is the one op that needs geometry boolean math, because a
+        /// DrawingContext can't raster-XOR: a reverse field XORs against everything painted under it.
+        /// We reproduce that as two paint ops — erase (white) where the field overlaps the visible
+        /// black, and add (black) where it doesn't. Crucially, a reverse only interacts with the black
+        /// pieces it actually overlaps, so rather than compose against one ever-growing
+        /// <c>visibleBlack</c> geometry (which made a reverse-heavy label like Example11 quadratic), we
+        /// keep the black-modifying ops as a list with bounds and compose only the few that overlap the
+        /// field's bounding box. A piece disjoint from the field contributes nothing to the intersection
+        /// or the subtraction, so the bounding-box filter is exact, not an approximation.</para>
+        /// </summary>
+        private List<LabelOp> BuildContent(
             IEnumerable<ZplElementBase> elements, int width, int height, int printDensityDpmm)
         {
             var context = new DrawContext(width, height);
+            var ops = new List<LabelOp>();
 
-            Geometry? background = null;   // running black region
-            Geometry? whiteRegion = null;  // running explicit-white region
-            var images = new List<ImageOp>();
+            // Ordered black-compositing ops (Union = black fill, Exclude = white fill, Xor = reverse),
+            // each with its bounds. Built lazily the first time a reverse needs it; null until then, so
+            // labels without ^FR pay nothing.
+            List<BlackOp>? blackOps = null;
 
             InternationalFont internationalFont = InternationalFont.ZCP850;
             Point currentDefaultPosition = new(0, 0);
@@ -187,34 +203,51 @@ namespace DotZpl.Rendering
 
                     Geometry? black = context.TakeBlack();
                     Geometry? white = context.TakeWhite();
-                    images.AddRange(context.TakeImages());
 
-                    // Two regions are maintained in document order: `background` (black pixels) and
-                    // `whiteRegion` (explicit white pixels, needed only when the final background is
-                    // transparent). Every element mutually excludes itself from the *other* region so
-                    // that a later element correctly paints over an earlier one — e.g. a black border
-                    // drawn last must show through white shapes drawn before it.
                     if (drawer.IsReverseDraw(element))
                     {
-                        // Field Reverse (^FR) is a geometry XOR against the painted background.
-                        // Skia's InvertDrawWhite normalises a white-drawn reverse shape to black before
-                        // the XOR, so white vs black reverse have the identical geometric effect here.
-                        background = Xor(background, black);
-                        whiteRegion = Exclude(whiteRegion, black);
+                        // ^FR: XOR the field against the visible black under it. Skia's InvertDrawWhite
+                        // normalises a white-drawn reverse to black before the XOR, so white vs black
+                        // reverse have the identical effect here — both go through `black`.
+                        if (black != null)
+                        {
+                            blackOps ??= BuildBlackOps(ops);
+
+                            Rect fieldBounds = black.Bounds;
+                            Geometry? localBlack = ComposeOverlapping(blackOps, fieldBounds);
+                            if (localBlack == null)
+                            {
+                                ops.Add(LabelOp.Black(black));     // nothing underneath: reverse is all black
+                            }
+                            else
+                            {
+                                Geometry erase = Compat.Combine(black, localBlack, GeometryCombineMode.Intersect);
+                                Geometry add = Compat.Combine(black, localBlack, GeometryCombineMode.Exclude);
+                                ops.Add(LabelOp.WhiteFill(erase));  // erase where the field overlaps black
+                                ops.Add(LabelOp.Black(add));        // add black where it doesn't
+                            }
+
+                            blackOps.Add(new BlackOp(black, GeometryCombineMode.Xor));
+                        }
                     }
                     else
                     {
                         if (black != null)
                         {
-                            background = Union(background, black);
-                            whiteRegion = Exclude(whiteRegion, black);
+                            ops.Add(LabelOp.Black(black));
+                            blackOps?.Add(new BlackOp(black, GeometryCombineMode.Union));
                         }
 
                         if (white != null)
                         {
-                            background = Exclude(background, white);
-                            whiteRegion = Union(whiteRegion, white);
+                            ops.Add(LabelOp.WhiteFill(white));
+                            blackOps?.Add(new BlackOp(white, GeometryCombineMode.Exclude));
                         }
+                    }
+
+                    foreach (ImageOp image in context.TakeImages())
+                    {
+                        ops.Add(LabelOp.Img(image));
                     }
                 }
                 catch (Exception ex)
@@ -223,22 +256,73 @@ namespace DotZpl.Rendering
                 }
             }
 
-            return (background, whiteRegion, images);
+            return ops;
+        }
+
+        /// <summary>A black-compositing op kept for resolving <c>^FR</c>: a geometry, how it modifies the
+        /// black region, and its bounds (cached so the reverse path can bounding-box-filter cheaply).</summary>
+        private readonly struct BlackOp
+        {
+            public readonly Geometry Geom;
+            public readonly GeometryCombineMode Mode;   // Union (black), Exclude (white), Xor (reverse)
+            public readonly Rect Bounds;
+
+            public BlackOp(Geometry geom, GeometryCombineMode mode)
+            {
+                Geom = geom;
+                Mode = mode;
+                Bounds = geom.Bounds;
+            }
+        }
+
+        /// <summary>Seed the black-op list from the fill ops emitted so far (black = Union, white = Exclude).</summary>
+        private static List<BlackOp> BuildBlackOps(List<LabelOp> ops)
+        {
+            var list = new List<BlackOp>(ops.Count);
+            foreach (LabelOp op in ops)
+            {
+                if (!op.IsImage)
+                {
+                    list.Add(new BlackOp(op.Fill!, op.White ? GeometryCombineMode.Exclude : GeometryCombineMode.Union));
+                }
+            }
+
+            return list;
         }
 
         /// <summary>
-        /// Accumulate <paramref name="b"/> additively into <paramref name="a"/> as a true boolean
-        /// union.
-        ///
-        /// <para>A fill-rule <see cref="GeometryGroup"/> is NOT a safe union for independent
-        /// elements: two overlapping shapes with opposite contour winding cancel (count 0 under
-        /// NonZero / EvenOdd) rather than combine, punching an inverse-draw hole. That happens for
-        /// real labels — e.g. a large glyph drawn over a MaxiCode, where the glyph outline and the
-        /// MaxiCode hexagons wind opposite ways. Only a Boolean union (or painting each shape
-        /// separately) is correct here. <c>Compat.Combine</c> resolves to the eager
-        /// <c>Geometry.Combine</c> on WPF (a flat PathGeometry) and the lazy
-        /// <see cref="CombinedGeometry"/> on Avalonia.</para>
+        /// Compose the visible-black region restricted to <paramref name="bounds"/>, combining only the
+        /// black ops whose bounds overlap it. Ops outside <paramref name="bounds"/> can't intersect a
+        /// field there, so skipping them is exact; it keeps each reverse's boolean work proportional to
+        /// the few pieces it actually overlaps instead of the whole accumulated black.
         /// </summary>
+        private static Geometry? ComposeOverlapping(List<BlackOp> blackOps, Rect bounds)
+        {
+            Geometry? local = null;
+            foreach (BlackOp op in blackOps)
+            {
+                if (!Overlaps(op.Bounds, bounds))
+                {
+                    continue;
+                }
+
+                local = op.Mode switch
+                {
+                    GeometryCombineMode.Exclude => Exclude(local, op.Geom),
+                    GeometryCombineMode.Xor => Xor(local, op.Geom),
+                    _ => Union(local, op.Geom),
+                };
+            }
+
+            return local;
+        }
+
+        /// <summary>Whether two axis-aligned rectangles overlap (framework-neutral; avoids WPF/Avalonia method-name drift).</summary>
+        private static bool Overlaps(Rect a, Rect b)
+            => a.Left < b.Right && b.Left < a.Right && a.Top < b.Bottom && b.Top < a.Bottom;
+
+        // Boolean helpers — used only on the ^FR path (the additive pipeline paints instead).
+        // Compat.Combine evaluates eagerly on WPF (flat PathGeometry) and lazily on Avalonia.
         private static Geometry? Union(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
@@ -246,9 +330,6 @@ namespace DotZpl.Rendering
             return Compat.Combine(a, b, GeometryCombineMode.Union);
         }
 
-        // Xor / Exclude likewise need the boolean op. Compat.Combine evaluates eagerly on WPF (one
-        // flat PathGeometry, no tree to walk at rasterise time) and stays with the lazy
-        // CombinedGeometry on Avalonia.
         private static Geometry? Xor(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
