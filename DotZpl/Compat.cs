@@ -174,9 +174,15 @@ namespace DotZpl
             image.PixelSize.Height;
 #endif
 
-        /// <summary>Rasterise a vector <see cref="DrawingGroup"/> to a PNG byte array at 96 dpi.</summary>
-        public static byte[] RenderToPng(DrawingGroup drawing, int width, int height, bool antialias)
+        /// <summary>
+        /// Rasterise a built <see cref="DotZpl.Rendering.LabelDrawing"/> to a PNG byte array at 96 dpi.
+        /// Draws straight into the platform <see cref="RenderTargetBitmap"/>'s live drawing context,
+        /// which supports the full primitive set on both backends (unlike Avalonia's recording context).
+        /// </summary>
+        public static byte[] RenderToPng(DotZpl.Rendering.LabelDrawing label, bool antialias)
         {
+            int width = label.Width;
+            int height = label.Height;
 #if WPF
             var visual = new System.Windows.Media.DrawingVisual();
             if (!antialias)
@@ -186,7 +192,7 @@ namespace DotZpl
 
             using (DrawingContext dc = visual.RenderOpen())
             {
-                dc.DrawDrawing(drawing);
+                label.Draw(dc);
             }
 
             var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
@@ -209,12 +215,12 @@ namespace DotZpl
                         BitmapInterpolationMode = BitmapInterpolationMode.None,
                     }))
                     {
-                        drawing.Draw(ctx);
+                        label.Draw(ctx);
                     }
                 }
                 else
                 {
-                    drawing.Draw(ctx);
+                    label.Draw(ctx);
                 }
             }
 

@@ -1,4 +1,4 @@
-namespace DotZpl.Viewer.ViewModels
+namespace DotZpl.Viewer.Shared.ViewModels
 {
     /// <summary>A label-size preset (mirrors the WebApi's label format dropdown).</summary>
     public class LabelFormat

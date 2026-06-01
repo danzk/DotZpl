@@ -1,6 +1,6 @@
 using System.Windows;
 
-using DotZpl.Viewer.ViewModels;
+using DotZpl.Viewer.Shared.ViewModels;
 
 namespace DotZpl.Viewer
 {
@@ -9,7 +9,7 @@ namespace DotZpl.Viewer
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new MainViewModel();
+            DataContext = new MainViewModel(new WpfDispatcher(), new WpfFileDialogService());
         }
     }
 }

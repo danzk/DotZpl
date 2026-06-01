@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace DotZpl.Viewer.ViewModels
+namespace DotZpl.Viewer.Shared.ViewModels
 {
     /// <summary>Minimal <see cref="INotifyPropertyChanged"/> base for MVVM.</summary>
     public abstract class ViewModelBase : INotifyPropertyChanged

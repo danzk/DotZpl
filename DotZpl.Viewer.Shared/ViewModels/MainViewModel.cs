@@ -4,32 +4,36 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Input;
-using System.Windows.Threading;
-
-using Microsoft.Win32;
 
 using BinaryKits.Zpl.Analyzer;
 
 using DotZpl.Rendering;
 
-namespace DotZpl.Viewer.ViewModels
+namespace DotZpl.Viewer.Shared.ViewModels
 {
     public class MainViewModel : ViewModelBase
     {
         private const double Inch2Mm = 25.4;
 
-        // Debounces live rendering so we re-render shortly after the user stops typing, not per keystroke.
-        private readonly DispatcherTimer _renderTimer;
+        private readonly IDispatcher _dispatcher;
+        private readonly IFileDialogService _fileDialog;
 
-        public MainViewModel()
+        // Debounces live rendering so we re-render shortly after the user stops typing, not per
+        // keystroke. A thread-pool timer fires after the idle window and posts the render call
+        // back onto the UI thread via the injected dispatcher (each platform's UI thread).
+        private readonly Timer _renderTimer;
+
+        public MainViewModel(IDispatcher dispatcher, IFileDialogService fileDialog)
         {
-            _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-            _renderTimer.Tick += (_, _) => RenderNow();
+            _dispatcher = dispatcher;
+            _fileDialog = fileDialog;
+            _renderTimer = new Timer(_ => _dispatcher.Post(RenderNow), null, Timeout.Infinite, Timeout.Infinite);
 
             RenderCommand = new RelayCommand(RenderNow);
-            SavePngCommand = new RelayCommand(SavePng);
-            SaveZplCommand = new RelayCommand(SaveZpl);
+            SavePngCommand = new RelayCommand(() => _ = SavePngAsync());
+            SaveZplCommand = new RelayCommand(() => _ = SaveZplAsync());
             ResetTransformCommand = new RelayCommand(ResetTransform);
 
             LoadLabels();
@@ -184,15 +188,12 @@ namespace DotZpl.Viewer.ViewModels
 
         /// <summary>Debounced live render: re-render shortly after the last edit.</summary>
         private void ScheduleRender()
-        {
-            _renderTimer.Stop();
-            _renderTimer.Start();
-        }
+            => _renderTimer.Change(TimeSpan.FromMilliseconds(300), Timeout.InfiniteTimeSpan);
 
         /// <summary>Render immediately (explicit actions: label/format selection, the Render button).</summary>
         private void RenderNow()
         {
-            _renderTimer.Stop();
+            _renderTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             Render();
         }
 
@@ -228,10 +229,12 @@ namespace DotZpl.Viewer.ViewModels
                 }
 
                 // Surface draw-time failures too (the control itself renders empty on error).
+                // CreateLabelDrawing runs the full element-drawer pipeline (geometry + image decode)
+                // — it's the cross-platform builder that throws if any element fails to render.
                 if (info.LabelInfos.Length > 0)
                 {
                     new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
-                        .CreateDrawing(info.LabelInfos[0].ZplElements, PreviewWidth, PreviewHeight, PreviewDpmm);
+                        .CreateLabelDrawing(info.LabelInfos[0].ZplElements, PreviewWidth, PreviewHeight, PreviewDpmm);
                 }
             }
             catch (Exception ex)
@@ -242,15 +245,15 @@ namespace DotZpl.Viewer.ViewModels
             OnPropertyChanged(nameof(HasUnknownCommands));
         }
 
-        private void SavePng()
+        private async System.Threading.Tasks.Task SavePngAsync()
         {
             if (string.IsNullOrWhiteSpace(ZplText))
             {
                 return;
             }
 
-            var dialog = new SaveFileDialog { Filter = "PNG image (*.png)|*.png", FileName = "label.png" };
-            if (dialog.ShowDialog() != true)
+            string? path = await _fileDialog.SaveFileAsync("Save PNG", "label.png", "png", "PNG image");
+            if (path == null)
             {
                 return;
             }
@@ -266,7 +269,7 @@ namespace DotZpl.Viewer.ViewModels
 
                 byte[] png = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
                     .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm);
-                File.WriteAllBytes(dialog.FileName, png);
+                File.WriteAllBytes(path, png);
             }
             catch (Exception ex)
             {
@@ -274,12 +277,12 @@ namespace DotZpl.Viewer.ViewModels
             }
         }
 
-        private void SaveZpl()
+        private async System.Threading.Tasks.Task SaveZplAsync()
         {
-            var dialog = new SaveFileDialog { Filter = "ZPL (*.zpl)|*.zpl|All files (*.*)|*.*", FileName = "label.zpl" };
-            if (dialog.ShowDialog() == true)
+            string? path = await _fileDialog.SaveFileAsync("Save ZPL", "label.zpl", "zpl", "ZPL");
+            if (path != null)
             {
-                File.WriteAllText(dialog.FileName, ZplText ?? string.Empty);
+                File.WriteAllText(path, ZplText ?? string.Empty);
             }
         }
 

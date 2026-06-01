@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="DotZpl/DotZpl.csproj" />
+  <Project Path="DotZpl.Viewer.Shared/DotZpl.Viewer.Shared.csproj" />
   <Project Path="DotZpl.Viewer/DotZpl.Viewer.csproj" />
+  <Project Path="DotZpl.Viewer.Avalonia/DotZpl.Viewer.Avalonia.csproj" />
   <Project Path="DotZpl.UnitTest/DotZpl.UnitTest.csproj" />
 </Solution>

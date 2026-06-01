@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Multi-target to match DotZpl's TFMs so the compiled-against types line up at runtime for
+         each viewer. The shared MainViewModel only touches framework-agnostic ZplRenderer methods,
+         but DotZpl.Rendering.ZplRenderer.CreateDrawing returns a per-framework DrawingGroup, so a
+         single-TFM Shared assembly would bake one DrawingGroup signature in and the other viewer
+         would hit MissingMethodException at runtime. -->
+    <TargetFrameworks>net10.0-windows;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DotZpl.Viewer.Shared</RootNamespace>
+    <AssemblyName>DotZpl.Viewer.Shared</AssemblyName>
+  </PropertyGroup>
+
+  <!-- The WPF flavour of DotZpl requires UseWPF; without it the WPF symbols ZplRenderer references
+       (System.Windows.Media.DrawingGroup, etc.) are unresolved when we link against that TFM. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotZpl\DotZpl.csproj" />
+  </ItemGroup>
+
+</Project>

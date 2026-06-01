@@ -1,4 +1,4 @@
-namespace DotZpl.Viewer.ViewModels
+namespace DotZpl.Viewer.Shared.ViewModels
 {
     /// <summary>A sample label entry shown in the browser (mirrors the WebApi's LabelItemDto).</summary>
     public class LabelItem

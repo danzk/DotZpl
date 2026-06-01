@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-using DotZpl.Viewer.ViewModels;
+using DotZpl.Viewer.Shared;
+using DotZpl.Viewer.Shared.ViewModels;
 
 namespace DotZpl.UnitTest
 {
@@ -18,7 +20,7 @@ namespace DotZpl.UnitTest
         [TestMethod]
         public void MainViewModel_LoadsLabels_AndRendersFirst()
         {
-            var vm = StaRunner.Run(() => new MainViewModel());
+            var vm = StaRunner.Run(() => NewViewModel());
 
             Assert.IsTrue(vm.ExampleLabels.Count > 0, "example labels loaded");
             Assert.IsTrue(vm.TestLabels.Count > 0, "test labels loaded");
@@ -32,7 +34,7 @@ namespace DotZpl.UnitTest
         {
             var vm = StaRunner.Run(() =>
             {
-                var v = new MainViewModel();
+                var v = NewViewModel();
                 LabelItem label = v.TestLabels.First(l => l.Format.Contains('x'));
                 v.SelectedTestLabel = label;
                 return v;
@@ -50,7 +52,7 @@ namespace DotZpl.UnitTest
 
             string? preview = StaRunner.Run(() =>
             {
-                var vm = new MainViewModel();
+                var vm = NewViewModel();
                 vm.ZplText = edited;                         // schedules a debounced render (does not apply immediately)
                 Assert.AreNotEqual(edited, vm.PreviewZpl, "render is debounced, not immediate");
 
@@ -59,6 +61,23 @@ namespace DotZpl.UnitTest
             });
 
             Assert.AreEqual(edited, preview, "editing the ZPL should live-update the preview");
+        }
+
+        /// <summary>Wires up the VM with WPF-flavoured test doubles: the dispatcher posts via the current
+        /// STA thread's <see cref="Dispatcher"/>, and the save-file service refuses (returns null) so the
+        /// VM never blocks a test on a real dialog.</summary>
+        private static MainViewModel NewViewModel() => new(new TestDispatcher(), new NullFileDialogService());
+
+        private sealed class TestDispatcher : IDispatcher
+        {
+            private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+            public void Post(Action action) => _dispatcher.BeginInvoke(action);
+        }
+
+        private sealed class NullFileDialogService : IFileDialogService
+        {
+            public Task<string?> SaveFileAsync(string title, string defaultFileName, string extension, string description)
+                => Task.FromResult<string?>(null);
         }
 
         /// <summary>Run the dispatcher message loop for a fixed duration so DispatcherTimers can tick.</summary>
