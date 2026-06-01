@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DotZpl.Viewer.Avalonia</RootNamespace>
+    <AssemblyName>DotZpl.Viewer.Avalonia</AssemblyName>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotZpl\DotZpl.csproj" />
+    <ProjectReference Include="..\DotZpl.Viewer.Shared\DotZpl.Viewer.Shared.csproj" />
+  </ItemGroup>
+
+  <!-- Sample labels (Example/ and Test/) shown in the browser, copied next to the app. -->
+  <ItemGroup>
+    <Content Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Viewer.WebApi\Labels\**\*.zpl2"
+             Link="Labels\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
