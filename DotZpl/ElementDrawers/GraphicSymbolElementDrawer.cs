@@ -15,7 +15,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element.GetType() == typeof(ZplGraphicSymbol);
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
         {
             if (element is not ZplGraphicSymbol graphicSymbol)
             {

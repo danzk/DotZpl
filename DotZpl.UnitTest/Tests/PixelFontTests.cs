@@ -4,12 +4,9 @@ using System.Windows.Media.Imaging;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-using DotZpl.Rendering;
+using BinaryKits.Zpl.Analyzer;
 
-// PrinterStorage / ZplAnalyzer are non-colliding utilities in BinaryKits.Zpl.Viewer; alias them so
-// the unqualified ZplElementDrawer / DrawerOptions below resolve to DotZpl's types.
-using PrinterStorage = BinaryKits.Zpl.Viewer.PrinterStorage;
-using ZplAnalyzer = BinaryKits.Zpl.Viewer.ZplAnalyzer;
+using DotZpl.Rendering;
 
 namespace DotZpl.UnitTest
 {
@@ -108,7 +105,7 @@ namespace DotZpl.UnitTest
             {
                 var storage = new PrinterStorage();
                 var elements = new ZplAnalyzer(storage).Analyze(zpl).LabelInfos[0].ZplElements;
-                byte[] png = new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true })
+                byte[] png = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
                     .DrawPng(elements, 60, 60, 8);   // 480 x 480 dot label
                 return BlackInkSize(png);
             });

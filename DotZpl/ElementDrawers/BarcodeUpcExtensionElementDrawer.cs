@@ -2,8 +2,8 @@ using System;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer.Helpers;
-using BinaryKits.Zpl.Viewer.Symologies;
+using BinaryKits.Zpl.Analyzer.Helpers;
+using BinaryKits.Zpl.Analyzer.Symologies;
 
 using DotZpl.Rendering;
 using DotZpl.Text;
@@ -15,7 +15,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplBarcodeUpcExtension;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
         {
             if (element is not ZplBarcodeUpcExtension barcode)
             {

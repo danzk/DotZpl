@@ -5,7 +5,7 @@ using System.Text;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer.Helpers;
+using BinaryKits.Zpl.Analyzer.Helpers;
 
 using DotZpl.Rendering;
 using DotZpl.Text;
@@ -23,7 +23,7 @@ namespace DotZpl.ElementDrawers
         public override bool IsReverseDraw(ZplElementBase element)
             => element is ZplFieldBlock fieldBlock && fieldBlock.ReversePrint;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
         {
             if (element is not ZplFieldBlock fieldBlock)
             {

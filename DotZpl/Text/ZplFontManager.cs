@@ -12,7 +12,7 @@ namespace DotZpl.Text
     /// stacks to a WPF <see cref="Typeface"/> / <see cref="GlyphTypeface"/> (instead of an
     /// <c>SKTypeface</c>) and exposes the embedded graphic-symbol font used by <c>^GS</c>.
     /// </summary>
-    public class FontManager
+    public class ZplFontManager
     {
         /// <summary>Primary (proportional) font stack for ZPL font "0". Ordered by preference.</summary>
         public List<string> FontStack0 { get; set; } = new()
@@ -83,7 +83,7 @@ namespace DotZpl.Text
         /// </summary>
         public double Font0FallbackCondense { get; set; } = 0.86;
 
-        public FontManager()
+        public ZplFontManager()
         {
             FontLoader = fontName => fontName switch
             {
@@ -177,7 +177,7 @@ namespace DotZpl.Text
             var family = new FontFamily($"avares://DotZpl/Resources/{avaresName}#{familyName}");
             return new Typeface(family).GlyphTypeface;
 #elif WPF
-            Assembly assembly = typeof(FontManager).Assembly;
+            Assembly assembly = typeof(ZplFontManager).Assembly;
             using Stream? stream = assembly.GetManifestResourceStream(logicalName)
                 ?? throw new InvalidOperationException($"Embedded font resource '{logicalName}' not found.");
 

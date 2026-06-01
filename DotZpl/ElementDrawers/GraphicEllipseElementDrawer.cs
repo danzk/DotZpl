@@ -15,7 +15,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplGraphicEllipse;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
             if (element is not ZplGraphicEllipse graphicEllipse)
             {

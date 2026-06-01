@@ -131,7 +131,7 @@ namespace DotZpl.Rendering
         }
 
         /// <summary>Centered single-string interpretation line, mirroring <c>DrawInterpretationLine</c>.</summary>
-        protected void DrawInterpretationLine(string interpretation, GlyphTypeface gt, double emSize, double x, double y, int barcodeWidth, int barcodeHeight, bool useFieldOrigin, FieldOrientation fieldOrientation, bool printAboveCode, DrawerOptions options)
+        protected void DrawInterpretationLine(string interpretation, GlyphTypeface gt, double emSize, double x, double y, int barcodeWidth, int barcodeHeight, bool useFieldOrigin, FieldOrientation fieldOrientation, bool printAboveCode, ZplRendererOptions options)
         {
             RotateTransform? rot = GetRotationTransform(x, y, barcodeWidth, barcodeHeight, useFieldOrigin, fieldOrientation);
             if (rot != null) context.PushTransform(rot);
@@ -162,7 +162,7 @@ namespace DotZpl.Rendering
         protected void DrawDigitInterpretationLine(
             bool[] guardArray, bool[]? maskArray, string interpretation, GlyphTypeface gt, double emSize,
             double x, double y, int barcodeWidth, int barcodeHeight, bool useFieldOrigin,
-            FieldOrientation fieldOrientation, int moduleWidth, DrawerOptions options,
+            FieldOrientation fieldOrientation, int moduleWidth, ZplRendererOptions options,
             Func<int, int> extraModulesAfter)
         {
             RotateTransform? rot = GetRotationTransform(x, y, barcodeWidth, barcodeHeight, useFieldOrigin, fieldOrientation);

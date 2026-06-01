@@ -9,13 +9,9 @@ using System.Windows.Threading;
 
 using Microsoft.Win32;
 
-using DotZpl.Rendering;
+using BinaryKits.Zpl.Analyzer;
 
-// BinaryKits.Zpl.Viewer is the Skia renderer's namespace; PrinterStorage / ZplAnalyzer are non-
-// colliding utilities, but ZplElementDrawer / DrawerOptions / FontManager collide with our types.
-// Alias just what we need so the unqualified colliding names below resolve to DotZpl.
-using PrinterStorage = BinaryKits.Zpl.Viewer.PrinterStorage;
-using ZplAnalyzer = BinaryKits.Zpl.Viewer.ZplAnalyzer;
+using DotZpl.Rendering;
 
 namespace DotZpl.Viewer.ViewModels
 {
@@ -234,7 +230,7 @@ namespace DotZpl.Viewer.ViewModels
                 // Surface draw-time failures too (the control itself renders empty on error).
                 if (info.LabelInfos.Length > 0)
                 {
-                    new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true })
+                    new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
                         .CreateDrawing(info.LabelInfos[0].ZplElements, PreviewWidth, PreviewHeight, PreviewDpmm);
                 }
             }
@@ -268,7 +264,7 @@ namespace DotZpl.Viewer.ViewModels
                     return;
                 }
 
-                byte[] png = new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true })
+                byte[] png = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
                     .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm);
                 File.WriteAllBytes(dialog.FileName, png);
             }

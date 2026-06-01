@@ -2,21 +2,16 @@ using System;
 using System.Collections.Generic;
 
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer.Models;
+using BinaryKits.Zpl.Analyzer;
+using BinaryKits.Zpl.Analyzer.Models;
 
 using DotZpl.Rendering;
-
-// PrinterStorage / ZplAnalyzer collide with no DotZpl types, but they live in BinaryKits.Zpl.Viewer
-// alongside ZplElementDrawer / DrawerOptions / FontManager (the Skia reference). Pull them in by
-// alias so the unqualified colliding names below resolve to DotZpl's types.
-using PrinterStorage = BinaryKits.Zpl.Viewer.PrinterStorage;
-using ZplAnalyzer = BinaryKits.Zpl.Viewer.ZplAnalyzer;
 
 namespace DotZpl.Controls
 {
     /// <summary>
     /// A WPF control that renders a ZPL string as native, scalable vector content via
-    /// <see cref="ZplElementDrawer"/>. Supports fit-to-control scaling (<see cref="Stretch"/>) and
+    /// <see cref="ZplRenderer"/>. Supports fit-to-control scaling (<see cref="Stretch"/>) and
     /// arbitrary <see cref="RotationAngle"/> of the whole label.
     ///
     /// <para>The label is rendered in ZPL dots (1 dot = 1 device-independent unit) and then scaled /
@@ -66,7 +61,7 @@ namespace DotZpl.Controls
 
         /// <summary>Optional renderer options (fonts, antialias, text backend). When null, options are built from <see cref="OpaqueBackground"/>.</summary>
         public static readonly DependencyProperty OptionsProperty = DependencyProperty.Register(
-            nameof(Options), typeof(DrawerOptions), typeof(ZplLabelView),
+            nameof(Options), typeof(ZplRendererOptions), typeof(ZplLabelView),
             new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnContentChanged));
 
         /// <summary>Horizontal pan of the rendered label, in device-independent units (applied after scaling).</summary>
@@ -86,7 +81,7 @@ namespace DotZpl.Controls
         public double RotationAngle { get => (double)GetValue(RotationAngleProperty); set => SetValue(RotationAngleProperty, value); }
         public Stretch Stretch { get => (Stretch)GetValue(StretchProperty); set => SetValue(StretchProperty, value); }
         public bool OpaqueBackground { get => (bool)GetValue(OpaqueBackgroundProperty); set => SetValue(OpaqueBackgroundProperty, value); }
-        public DrawerOptions? Options { get => (DrawerOptions?)GetValue(OptionsProperty); set => SetValue(OptionsProperty, value); }
+        public ZplRendererOptions? Options { get => (ZplRendererOptions?)GetValue(OptionsProperty); set => SetValue(OptionsProperty, value); }
         public double OffsetX { get => (double)GetValue(OffsetXProperty); set => SetValue(OffsetXProperty, value); }
         public double OffsetY { get => (double)GetValue(OffsetYProperty); set => SetValue(OffsetYProperty, value); }
 
@@ -123,8 +118,8 @@ namespace DotZpl.Controls
                 }
 
                 IList<ZplElementBase> elements = info.LabelInfos[0].ZplElements;
-                DrawerOptions options = Options ?? new DrawerOptions { OpaqueBackground = OpaqueBackground };
-                _drawing = new ZplElementDrawer(storage, options)
+                ZplRendererOptions options = Options ?? new ZplRendererOptions { OpaqueBackground = OpaqueBackground };
+                _drawing = new ZplRenderer(storage, options)
                     .CreateDrawing(elements, LabelWidth, LabelHeight, PrintDensityDpmm);
             }
             catch

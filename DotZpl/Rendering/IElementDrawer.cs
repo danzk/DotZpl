@@ -1,7 +1,7 @@
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer;
+using BinaryKits.Zpl.Analyzer;
 
 namespace DotZpl.Rendering
 {
@@ -27,12 +27,12 @@ namespace DotZpl.Rendering
         bool ForceBitmapDraw(ZplElementBase element);
 
         /// <summary>Draw the element; returns the updated default field position.</summary>
-        Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition);
+        Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition);
 
         /// <summary>Draw the element with international font context.</summary>
-        Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont);
+        Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont);
 
         /// <summary>Draw the element with international font and print-density context.</summary>
-        Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm);
+        Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm);
     }
 }

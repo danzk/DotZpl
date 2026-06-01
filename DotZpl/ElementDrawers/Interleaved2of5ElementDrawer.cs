@@ -2,7 +2,7 @@ using System;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer.Helpers;
+using BinaryKits.Zpl.Analyzer.Helpers;
 
 using DotZpl.Rendering;
 using DotZpl.Text;
@@ -16,7 +16,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplBarcodeInterleaved2of5;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
             if (element is not ZplBarcodeInterleaved2of5 barcode)
             {

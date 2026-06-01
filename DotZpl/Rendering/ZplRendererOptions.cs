@@ -1,16 +1,12 @@
 using DotZpl.Text;
 
-// Avalonia.Media also exposes a FontManager (the platform's font registry). Alias ours so the
-// unqualified name unambiguously resolves to DotZpl.Text.FontManager on every TFM.
-using FontManager = DotZpl.Text.FontManager;
-
 namespace DotZpl.Rendering
 {
     /// <summary>
-    /// WPF analogue of <c>BinaryKits.Zpl.Viewer.ElementDrawers.DrawerOptions</c>.
+    /// WPF analogue of <c>BinaryKits.Zpl.Viewer.ElementDrawers.ZplRendererOptions</c>.
     /// Drops the Skia-specific render format/quality and the PDF path (out of scope for v1).
     /// </summary>
-    public class DrawerOptions
+    public class ZplRendererOptions
     {
         /// <summary>
         /// Applies the label over a white background after rendering all elements.
@@ -43,11 +39,11 @@ namespace DotZpl.Rendering
         /// </summary>
         public TextBackend TextBackend { get; set; } = TextBackend.GlyphRun;
 
-        public FontManager FontManager { get; }
+        public ZplFontManager FontManager { get; }
 
-        public DrawerOptions() : this(new FontManager()) { }
+        public ZplRendererOptions() : this(new ZplFontManager()) { }
 
-        public DrawerOptions(FontManager fontManager)
+        public ZplRendererOptions(ZplFontManager fontManager)
         {
             FontManager = fontManager;
         }

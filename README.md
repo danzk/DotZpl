@@ -106,7 +106,7 @@ var storage  = new PrinterStorage();
 var analyzer = new ZplAnalyzer(storage);
 var elements = analyzer.Analyze(zplString).LabelInfos[0].ZplElements;
 
-var drawer = new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true });
+var drawer = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true });
 ```
 
 The primary output is **native, scalable WPF drawing content** — no rasterisation. Coordinates are
@@ -130,7 +130,7 @@ byte[] png = drawer.DrawPng(elements, 101.6, 152.4, 8);
 File.WriteAllBytes("label.png", png);
 ```
 
-`DrawerOptions` exposes `OpaqueBackground`, `Antialias`, the `ReplaceDashWithEnDash` /
+`ZplRendererOptions` exposes `OpaqueBackground`, `Antialias`, the `ReplaceDashWithEnDash` /
 `ReplaceUnderscoreWithEnSpace` text options, a `FontManager`, and a `TextBackend`
 (`GlyphRun` by default; `FormattedText` available for comparison).
 

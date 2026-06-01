@@ -5,20 +5,17 @@ using System.Windows.Media.Imaging;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using BinaryKits.Zpl.Analyzer;
+
 using DotZpl.Rendering;
 using DotZpl.Text;
-
-// BinaryKits.Zpl.Viewer's PrinterStorage / ZplAnalyzer are non-colliding utilities; the rest of
-// that namespace (ZplElementDrawer / DrawerOptions / FontManager) collides with our types.
-using PrinterStorage = BinaryKits.Zpl.Viewer.PrinterStorage;
-using ZplAnalyzer = BinaryKits.Zpl.Viewer.ZplAnalyzer;
 
 namespace DotZpl.UnitTest
 {
     /// <summary>
     /// The real Zebra font "0" is condensed. When it resolves to a non-condensed fallback (plain Arial,
-    /// on a machine without one of the <see cref="FontManager.FontStack0"/> condensed fonts), the
-    /// renderer squeezes it horizontally (<see cref="FontManager.Font0FallbackCondense"/>) to
+    /// on a machine without one of the <see cref="ZplFontManager.FontStack0"/> condensed fonts), the
+    /// renderer squeezes it horizontally (<see cref="ZplFontManager.Font0FallbackCondense"/>) to
     /// approximate font 0. Arial is always present, so these tests are deterministic.
     /// </summary>
     [TestClass]
@@ -43,7 +40,7 @@ namespace DotZpl.UnitTest
         [TestMethod]
         public void HorizontalScale_OnlyAffectsFont0()
         {
-            var mgr = new FontManager { FontStack0 = new List<string> { "Arial" } };
+            var mgr = new ZplFontManager { FontStack0 = new List<string> { "Arial" } };
             Assert.AreEqual(0.86, mgr.GetHorizontalScale("0"), 1e-9, "font 0 on the Arial fallback condenses");
             Assert.AreEqual(1.0, mgr.GetHorizontalScale("A"), 1e-9, "pixel font A is never condensed");
             Assert.AreEqual(1.0, mgr.GetHorizontalScale("C"), 1e-9, "pixel font C is never condensed");
@@ -56,15 +53,15 @@ namespace DotZpl.UnitTest
         {
             return StaRunner.Run(() =>
             {
-                var mgr = new FontManager
+                var mgr = new ZplFontManager
                 {
                     FontStack0 = new List<string> { "Arial" },   // force the no-condensed-font fallback
                     Font0FallbackCondense = condense,
                 };
-                var options = new DrawerOptions(mgr) { OpaqueBackground = true };
+                var options = new ZplRendererOptions(mgr) { OpaqueBackground = true };
                 var storage = new PrinterStorage();
                 var elements = new ZplAnalyzer(storage).Analyze(Zpl).LabelInfos[0].ZplElements;
-                byte[] png = new ZplElementDrawer(storage, options).DrawPng(elements, 100, 20, 8);
+                byte[] png = new ZplRenderer(storage, options).DrawPng(elements, 100, 20, 8);
                 return InkSize(png);
             });
         }

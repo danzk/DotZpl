@@ -1,7 +1,7 @@
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer;
+using BinaryKits.Zpl.Analyzer;
 
 namespace DotZpl.Rendering
 {
@@ -29,13 +29,13 @@ namespace DotZpl.Rendering
 
         public virtual bool ForceBitmapDraw(ZplElementBase element) => false;
 
-        public virtual Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition)
+        public virtual Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition)
             => currentPosition;
 
-        public virtual Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public virtual Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
             => Draw(element, options, currentPosition);
 
-        public virtual Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
+        public virtual Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont, int printDensityDpmm)
             => Draw(element, options, currentPosition, internationalFont);
 
         protected virtual Point CalculateNextDefaultPosition(double x, double y, double elementWidth, double elementHeight, bool useFieldOrigin, FieldOrientation fieldOrientation, Point currentPosition)

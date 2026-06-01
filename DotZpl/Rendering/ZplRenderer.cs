@@ -5,21 +5,21 @@ using System.Linq;
 
 using BinaryKits.Zpl.Label;
 using BinaryKits.Zpl.Label.Elements;
-using BinaryKits.Zpl.Viewer;
+using BinaryKits.Zpl.Analyzer;
 
 using DotZpl.ElementDrawers;
 
 namespace DotZpl.Rendering
 {
     /// <summary>
-    /// WPF analogue of <c>BinaryKits.Zpl.Viewer.ZplElementDrawer</c>. Builds the label as
+    /// WPF analogue of <c>BinaryKits.Zpl.Viewer.ZplRenderer</c>. Builds the label as
     /// <see cref="Geometry"/> (so Field Reverse can be reproduced via geometry XOR) and rasterises
     /// to a PNG through a <see cref="RenderTargetBitmap"/> at a fixed 96 dpi (1 ZPL dot = 1 pixel).
     ///
     /// <para>Must be invoked on an STA thread (WPF requirement). The unit-test harness uses
     /// <c>[STATestMethod]</c>.</para>
     /// </summary>
-    public class ZplElementDrawer
+    public class ZplRenderer
     {
         /// <summary>The registered element drawers (populated incrementally per implementation phase).</summary>
         public static IElementDrawer[] ElementDrawers { get; } =
@@ -50,13 +50,13 @@ namespace DotZpl.Rendering
             new RecallGraphicElementDrawer(),
         ];
 
-        private readonly DrawerOptions _options;
+        private readonly ZplRendererOptions _options;
         private readonly IPrinterStorage _printerStorage;
 
-        public ZplElementDrawer(IPrinterStorage printerStorage, DrawerOptions? options = null)
+        public ZplRenderer(IPrinterStorage printerStorage, ZplRendererOptions? options = null)
         {
             _printerStorage = printerStorage;
-            _options = options ?? new DrawerOptions();
+            _options = options ?? new ZplRendererOptions();
         }
 
         /// <summary>

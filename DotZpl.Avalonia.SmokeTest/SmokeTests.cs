@@ -6,14 +6,11 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 
+using BinaryKits.Zpl.Analyzer;
+
 using DotZpl.Rendering;
 
 using Xunit;
-
-// PrinterStorage / ZplAnalyzer are non-colliding utilities in BinaryKits.Zpl.Viewer; alias them
-// so the unqualified ZplElementDrawer / DrawerOptions below resolve to DotZpl's types.
-using PrinterStorage = BinaryKits.Zpl.Viewer.PrinterStorage;
-using ZplAnalyzer = BinaryKits.Zpl.Viewer.ZplAnalyzer;
 
 namespace DotZpl.Avalonia.SmokeTest
 {
@@ -36,7 +33,7 @@ namespace DotZpl.Avalonia.SmokeTest
         {
             var storage = new PrinterStorage();
             var elements = new ZplAnalyzer(storage).Analyze(zpl).LabelInfos[0].ZplElements;
-            return new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true })
+            return new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
                 .DrawPng(elements, 40, 30, 8);
         }
 

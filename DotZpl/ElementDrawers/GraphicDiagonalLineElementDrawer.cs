@@ -20,7 +20,7 @@ namespace DotZpl.ElementDrawers
         public override bool IsWhiteDraw(ZplElementBase element)
             => element is ZplGraphicDiagonalLine line && line.LineColor == LineColor.White;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
             if (element is not ZplGraphicDiagonalLine graphicLine)
             {

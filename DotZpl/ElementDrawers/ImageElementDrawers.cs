@@ -16,7 +16,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplGraphicField;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
             if (element is not ZplGraphicField graphicField)
             {
@@ -54,7 +54,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplImageMove;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
             if (element is not ZplImageMove imageMove)
             {
@@ -92,7 +92,7 @@ namespace DotZpl.ElementDrawers
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplRecallGraphic;
 
-        public override Point Draw(ZplElementBase element, DrawerOptions options, Point currentPosition, InternationalFont internationalFont)
+        public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
             if (element is not ZplRecallGraphic recallGraphic)
             {
