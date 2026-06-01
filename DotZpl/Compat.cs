@@ -1,42 +1,34 @@
 using System;
-using System.IO;
 
 namespace DotZpl
 {
     /// <summary>
-    /// Cross-framework helpers that paper over the few WPF/Avalonia API-shape differences which the
-    /// shared rendering code touches: <see cref="StreamGeometryContext"/> figure building, the empty
-    /// geometry sentinel, the non-zero fill rule (spelled differently), matrix pre-multiplication, the
-    /// raster→PNG path, and pushing a transform as an <see cref="IDisposable"/> scope.
+    /// Cross-framework facade over the WPF / Avalonia API-shape differences the shared rendering code
+    /// touches. The divergent operations live behind <see cref="IPlatform"/> (one implementation per
+    /// framework, picked once below); everything here is framework-agnostic — the public surface
+    /// delegates to the platform strategy or builds geometry from its primitives, so the rest of the
+    /// codebase has no inline <c>#if</c> branching.
     /// </summary>
     internal static class Compat
     {
-        /// <summary>Shared empty-geometry sentinel (WPF has <c>Geometry.Empty</c>; Avalonia does not).</summary>
+        private static readonly IPlatform Platform =
 #if WPF
-        public static readonly Geometry EmptyGeometry = Geometry.Empty;
-        public const FillRule NonZeroFill = FillRule.Nonzero;
-#elif AVALONIA
-        public static readonly Geometry EmptyGeometry = new StreamGeometry();
-        public const FillRule NonZeroFill = FillRule.NonZero;
+            new WpfPlatform();
+#else
+            new AvaloniaPlatform();
 #endif
 
+        /// <summary>Shared empty-geometry sentinel (stable by reference).</summary>
+        public static Geometry EmptyGeometry => Platform.EmptyGeometry;
+
+        /// <summary>The non-zero fill rule (spelled differently per framework).</summary>
+        public static FillRule NonZeroFill => Platform.NonZeroFill;
+
         /// <summary>
-        /// Combine two geometries with a boolean op. WPF uses the static
-        /// <see cref="Geometry.Combine(Geometry, Geometry, GeometryCombineMode, Transform)"/>,
-        /// which evaluates eagerly and returns a flattened <see cref="PathGeometry"/> — no deep
-        /// CombinedGeometry tree to walk at rasterise time. Avalonia 12's
-        /// <c>Geometry.Combine</c> restricts the second operand to <c>RectangleGeometry</c> only,
-        /// so we can't use it for arbitrary shapes (ring borders, annuli, glyph paths) — the
-        /// Avalonia path stays with the lazy <see cref="CombinedGeometry"/>.
+        /// Combine two geometries with a boolean op — eager <c>Geometry.Combine</c> (flat
+        /// <see cref="PathGeometry"/>) on WPF, lazy <see cref="CombinedGeometry"/> on Avalonia.
         /// </summary>
-        public static Geometry Combine(Geometry a, Geometry b, GeometryCombineMode mode)
-        {
-#if WPF
-            return Geometry.Combine(a, b, mode, null);
-#elif AVALONIA
-            return new CombinedGeometry(mode, a, b);
-#endif
-        }
+        public static Geometry Combine(Geometry a, Geometry b, GeometryCombineMode mode) => Platform.Combine(a, b, mode);
 
         /// <summary>
         /// Build a rounded-rectangle "ring" (outer rect minus inner rect) as a single
@@ -48,7 +40,7 @@ namespace DotZpl
         /// </summary>
         public static Geometry MakeRectRing(Rect outerRect, double outerRadius, Rect innerRect, double innerRadius)
         {
-            PathGeometry ring = NewPathGeometry();
+            PathGeometry ring = Platform.NewPathGeometry();
             ring.Figures!.Add(BuildRectFigure(outerRect, outerRadius, clockwise: true));
             ring.Figures!.Add(BuildRectFigure(innerRect, innerRadius, clockwise: false));
             return ring;
@@ -57,7 +49,7 @@ namespace DotZpl
         /// <summary>Elliptical equivalent of <see cref="MakeRectRing"/>.</summary>
         public static Geometry MakeEllipseRing(Point center, double outerRx, double outerRy, double innerRx, double innerRy)
         {
-            PathGeometry ring = NewPathGeometry();
+            PathGeometry ring = Platform.NewPathGeometry();
             ring.Figures!.Add(BuildEllipseFigure(center, outerRx, outerRy, clockwise: true));
             ring.Figures!.Add(BuildEllipseFigure(center, innerRx, innerRy, clockwise: false));
             return ring;
@@ -71,46 +63,46 @@ namespace DotZpl
             if (r <= 0)
             {
                 // Plain rectangle, four line segments.
-                PathFigure rectFig = NewFigure(new Point(x, y));
+                PathFigure rectFig = Platform.NewFigure(new Point(x, y));
                 if (clockwise)
                 {
-                    AddLine(rectFig, new Point(x + w, y));
-                    AddLine(rectFig, new Point(x + w, y + h));
-                    AddLine(rectFig, new Point(x, y + h));
+                    Platform.AddLine(rectFig, new Point(x + w, y));
+                    Platform.AddLine(rectFig, new Point(x + w, y + h));
+                    Platform.AddLine(rectFig, new Point(x, y + h));
                 }
                 else
                 {
-                    AddLine(rectFig, new Point(x, y + h));
-                    AddLine(rectFig, new Point(x + w, y + h));
-                    AddLine(rectFig, new Point(x + w, y));
+                    Platform.AddLine(rectFig, new Point(x, y + h));
+                    Platform.AddLine(rectFig, new Point(x + w, y + h));
+                    Platform.AddLine(rectFig, new Point(x + w, y));
                 }
                 return rectFig;
             }
 
             // Rounded rectangle. Each corner is a quarter-circle arc (small arc).
             var radSize = new Size(r, r);
-            PathFigure fig = NewFigure(new Point(x + r, y));
+            PathFigure fig = Platform.NewFigure(new Point(x + r, y));
             if (clockwise)
             {
-                AddLine(fig, new Point(x + w - r, y));
-                AddArc(fig, new Point(x + w, y + r), radSize, clockwise: true);
-                AddLine(fig, new Point(x + w, y + h - r));
-                AddArc(fig, new Point(x + w - r, y + h), radSize, clockwise: true);
-                AddLine(fig, new Point(x + r, y + h));
-                AddArc(fig, new Point(x, y + h - r), radSize, clockwise: true);
-                AddLine(fig, new Point(x, y + r));
-                AddArc(fig, new Point(x + r, y), radSize, clockwise: true);
+                Platform.AddLine(fig, new Point(x + w - r, y));
+                Platform.AddArc(fig, new Point(x + w, y + r), radSize, clockwise: true);
+                Platform.AddLine(fig, new Point(x + w, y + h - r));
+                Platform.AddArc(fig, new Point(x + w - r, y + h), radSize, clockwise: true);
+                Platform.AddLine(fig, new Point(x + r, y + h));
+                Platform.AddArc(fig, new Point(x, y + h - r), radSize, clockwise: true);
+                Platform.AddLine(fig, new Point(x, y + r));
+                Platform.AddArc(fig, new Point(x + r, y), radSize, clockwise: true);
             }
             else
             {
-                AddArc(fig, new Point(x, y + r), radSize, clockwise: false);
-                AddLine(fig, new Point(x, y + h - r));
-                AddArc(fig, new Point(x + r, y + h), radSize, clockwise: false);
-                AddLine(fig, new Point(x + w - r, y + h));
-                AddArc(fig, new Point(x + w, y + h - r), radSize, clockwise: false);
-                AddLine(fig, new Point(x + w, y + r));
-                AddArc(fig, new Point(x + w - r, y), radSize, clockwise: false);
-                AddLine(fig, new Point(x + r, y));
+                Platform.AddArc(fig, new Point(x, y + r), radSize, clockwise: false);
+                Platform.AddLine(fig, new Point(x, y + h - r));
+                Platform.AddArc(fig, new Point(x + r, y + h), radSize, clockwise: false);
+                Platform.AddLine(fig, new Point(x + w - r, y + h));
+                Platform.AddArc(fig, new Point(x + w, y + h - r), radSize, clockwise: false);
+                Platform.AddLine(fig, new Point(x + w, y + r));
+                Platform.AddArc(fig, new Point(x + w - r, y), radSize, clockwise: false);
+                Platform.AddLine(fig, new Point(x + r, y));
             }
             return fig;
         }
@@ -118,100 +110,30 @@ namespace DotZpl
         private static PathFigure BuildEllipseFigure(Point center, double rx, double ry, bool clockwise)
         {
             var size = new Size(rx, ry);
-            PathFigure fig = NewFigure(new Point(center.X, center.Y - ry));
+            PathFigure fig = Platform.NewFigure(new Point(center.X, center.Y - ry));
             // Two semi-arcs traversing the same direction give the full ellipse with consistent winding.
-            AddArc(fig, new Point(center.X, center.Y + ry), size, clockwise);
-            AddArc(fig, new Point(center.X, center.Y - ry), size, clockwise);
+            Platform.AddArc(fig, new Point(center.X, center.Y + ry), size, clockwise);
+            Platform.AddArc(fig, new Point(center.X, center.Y - ry), size, clockwise);
             return fig;
         }
 
-        private static PathGeometry NewPathGeometry()
-        {
-#if WPF
-            return new PathGeometry { FillRule = NonZeroFill };
-#elif AVALONIA
-            return new PathGeometry { FillRule = NonZeroFill, Figures = new PathFigures() };
-#endif
-        }
-
-        private static PathFigure NewFigure(Point start)
-        {
-#if WPF
-            return new PathFigure { StartPoint = start, IsClosed = true, IsFilled = true, Segments = new PathSegmentCollection() };
-#elif AVALONIA
-            return new PathFigure { StartPoint = start, IsClosed = true, Segments = new PathSegments() };
-#endif
-        }
-
-        private static void AddLine(PathFigure fig, Point p)
-        {
-#if WPF
-            fig.Segments!.Add(new LineSegment(p, false));
-#elif AVALONIA
-            fig.Segments!.Add(new LineSegment { Point = p });
-#endif
-        }
-
-        /// <summary>Append a quarter / semicircle arc to <paramref name="fig"/>, bridging the WPF / Avalonia ctor drift.</summary>
-        private static void AddArc(PathFigure fig, Point endPoint, Size size, bool clockwise)
-        {
-#if WPF
-            fig.Segments!.Add(new ArcSegment(endPoint, size, 0, false,
-                clockwise ? SweepDirection.Clockwise : SweepDirection.Counterclockwise, false));
-#elif AVALONIA
-            fig.Segments!.Add(new ArcSegment
-            {
-                Point = endPoint,
-                Size = size,
-                RotationAngle = 0,
-                IsLargeArc = false,
-                SweepDirection = clockwise ? SweepDirection.Clockwise : SweepDirection.CounterClockwise,
-            });
-#endif
-        }
-
         /// <summary>Begin a filled, closed figure at <paramref name="p"/>.</summary>
-        public static void Begin(this StreamGeometryContext ctx, Point p)
-        {
-#if WPF
-            ctx.BeginFigure(p, true, true);
-#elif AVALONIA
-            ctx.BeginFigure(p, true);
-#endif
-        }
+        public static void Begin(this StreamGeometryContext ctx, Point p) => Platform.Begin(ctx, p);
 
         /// <summary>Add a straight (fill-only) segment to <paramref name="p"/>.</summary>
-        public static void Line(this StreamGeometryContext ctx, Point p)
-        {
-#if WPF
-            ctx.LineTo(p, false, false);
-#elif AVALONIA
-            ctx.LineTo(p);
-#endif
-        }
+        public static void Line(this StreamGeometryContext ctx, Point p) => Platform.Line(ctx, p);
 
-        /// <summary>Close the current figure (WPF closes via the BeginFigure flag; Avalonia needs EndFigure).</summary>
-        public static void End(this StreamGeometryContext ctx)
-        {
-#if AVALONIA
-            ctx.EndFigure(true);
-#endif
-        }
+        /// <summary>Close the current figure.</summary>
+        public static void End(this StreamGeometryContext ctx) => Platform.End(ctx);
 
-        /// <summary>An ellipse from a centre and radii (WPF has this ctor; Avalonia takes a bounding rect).</summary>
+        /// <summary>An ellipse from a centre and radii.</summary>
         public static EllipseGeometry Ellipse(Point center, double radiusX, double radiusY)
-        {
-#if WPF
-            return new EllipseGeometry(center, radiusX, radiusY);
-#elif AVALONIA
-            return new EllipseGeometry(new Rect(center.X - radiusX, center.Y - radiusY, radiusX * 2, radiusY * 2));
-#endif
-        }
+            => Platform.Ellipse(center, radiusX, radiusY);
 
         /// <summary>
         /// A horizontal-only scale about <paramref name="about"/> (mirrors WPF's
         /// <c>ScaleTransform(sx, 1, cx, cy)</c>). Built from the shared 6-argument <see cref="Matrix"/>
-        /// constructor, whose component order is identical on both frameworks, so no #if is needed.
+        /// constructor, whose component order is identical on both frameworks, so it needs no strategy.
         /// </summary>
         public static Transform HorizontalScale(double scaleX, Point about)
         {
@@ -220,164 +142,35 @@ namespace DotZpl
         }
 
         /// <summary>Pre-multiply <paramref name="inner"/> onto <paramref name="current"/> (inner applied first).</summary>
-        public static Matrix Prepend(Matrix current, Matrix inner)
-        {
-#if WPF
-            current.Prepend(inner);   // Matrix is a struct (local copy); Prepend => this = inner * this
-            return current;
-#elif AVALONIA
-            return inner * current;   // Avalonia Matrix: value1 is applied first
-#endif
-        }
+        public static Matrix Prepend(Matrix current, Matrix inner) => Platform.Prepend(current, inner);
 
-        /// <summary>Push a matrix transform as an <see cref="IDisposable"/> scope (uniform across frameworks).</summary>
-#if WPF
-        public static IDisposable PushTransform(this DrawingContext dc, Matrix m)
-        {
-            dc.PushTransform(new MatrixTransform(m));
-            return new PopGuard(dc);
-        }
-
-        private sealed class PopGuard : IDisposable
-        {
-            private readonly DrawingContext _dc;
-            public PopGuard(DrawingContext dc) => _dc = dc;
-            public void Dispose() => _dc.Pop();
-        }
-#endif
-        // On Avalonia, DrawingContext.PushTransform(Matrix) already returns an IDisposable, so the
-        // call site `using (dc.PushTransform(matrix))` binds to the instance method directly.
+        // Pushing a transform as an IDisposable scope: on WPF a small extension supplies it
+        // (PushTransform.Wpf.cs); on Avalonia DrawingContext.PushTransform(Matrix) already returns an
+        // IDisposable, so the call site `using (dc.PushTransform(matrix))` binds to the instance method.
 
         /// <summary>Whether a <see cref="Typeface"/> resolves to a real glyph typeface on this platform.</summary>
-        public static bool TryResolve(Typeface typeface)
-        {
-#if WPF
-            return typeface.TryGetGlyphTypeface(out _);
-#elif AVALONIA
-            return FontManager.Current.TryGetGlyphTypeface(typeface, out _);
-#endif
-        }
+        public static bool TryResolve(Typeface typeface) => Platform.TryResolve(typeface);
 
-        /// <summary>Glyph index for a character (WPF: dictionary lookup; Avalonia: map indexer).</summary>
-        public static ushort GlyphIndex(GlyphTypeface gt, char c)
-        {
-#if WPF
-            return gt.CharacterToGlyphMap.TryGetValue(c, out ushort g) ? g : (ushort)0;
-#elif AVALONIA
-            return gt.CharacterToGlyphMap[c];   // missing codepoints map to glyph 0 (.notdef)
-#endif
-        }
+        /// <summary>Glyph index for a character (0 / .notdef when missing).</summary>
+        public static ushort GlyphIndex(GlyphTypeface gt, char c) => Platform.GlyphIndex(gt, c);
 
         /// <summary>Glyph advance as a fraction of the em (multiply by the rendering em size for DIUs).</summary>
-        public static double GlyphAdvanceEm(GlyphTypeface gt, ushort glyphIndex)
-        {
-#if WPF
-            return gt.AdvanceWidths[glyphIndex];
-#elif AVALONIA
-            gt.TryGetHorizontalGlyphAdvance(glyphIndex, out ushort advance);
-            return advance / (double)gt.Metrics.DesignEmHeight;
-#endif
-        }
+        public static double GlyphAdvanceEm(GlyphTypeface gt, ushort glyphIndex) => Platform.GlyphAdvanceEm(gt, glyphIndex);
 
-        /// <summary>Line height as a fraction of the em (≈ WPF <c>GlyphTypeface.Height</c>).</summary>
-        public static double FontLineHeightEm(GlyphTypeface gt)
-        {
-#if WPF
-            return gt.Height;
-#elif AVALONIA
-            FontMetrics m = gt.Metrics;
-            // Avalonia ascent is negative (above the baseline); descent positive (below).
-            return (m.Descent - m.Ascent + m.LineGap) / (double)m.DesignEmHeight;
-#endif
-        }
+        /// <summary>Line height as a fraction of the em.</summary>
+        public static double FontLineHeightEm(GlyphTypeface gt) => Platform.FontLineHeightEm(gt);
 
-        /// <summary>Decode PNG/raster bytes to the platform image type.</summary>
+        /// <summary>Decode PNG/raster bytes to the platform image type (null for empty input).</summary>
         public static BitmapSource? DecodeImage(byte[] data)
-        {
-            if (data == null || data.Length == 0)
-            {
-                return null;
-            }
-
-            using var ms = new MemoryStream(data);
-#if WPF
-            var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            return decoder.Frames[0];
-#elif AVALONIA
-            return new BitmapSource(ms);   // BitmapSource is aliased to Avalonia.Media.Imaging.Bitmap
-#endif
-        }
+            => data == null || data.Length == 0 ? null : Platform.DecodeImage(data);
 
         /// <summary>Pixel width of a decoded image.</summary>
-        public static int PixelWidth(BitmapSource image) =>
-#if WPF
-            image.PixelWidth;
-#elif AVALONIA
-            image.PixelSize.Width;
-#endif
+        public static int PixelWidth(BitmapSource image) => Platform.PixelWidth(image);
 
         /// <summary>Pixel height of a decoded image.</summary>
-        public static int PixelHeight(BitmapSource image) =>
-#if WPF
-            image.PixelHeight;
-#elif AVALONIA
-            image.PixelSize.Height;
-#endif
+        public static int PixelHeight(BitmapSource image) => Platform.PixelHeight(image);
 
-        /// <summary>
-        /// Rasterise a built <see cref="DotZpl.Rendering.LabelDrawing"/> to a PNG byte array at 96 dpi.
-        /// Draws straight into the platform <see cref="RenderTargetBitmap"/>'s live drawing context,
-        /// which supports the full primitive set on both backends (unlike Avalonia's recording context).
-        /// </summary>
-        public static byte[] RenderToPng(DotZpl.Rendering.LabelDrawing label, bool antialias)
-        {
-            int width = label.Width;
-            int height = label.Height;
-#if WPF
-            var visual = new System.Windows.Media.DrawingVisual();
-            if (!antialias)
-            {
-                RenderOptions.SetEdgeMode(visual, EdgeMode.Aliased);
-            }
-
-            using (DrawingContext dc = visual.RenderOpen())
-            {
-                label.Draw(dc);
-            }
-
-            var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            rtb.Render(visual);
-
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(rtb));
-            using var ms = new MemoryStream();
-            encoder.Save(ms);
-            return ms.ToArray();
-#elif AVALONIA
-            var rtb = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96, 96));
-            using (DrawingContext ctx = rtb.CreateDrawingContext())
-            {
-                if (!antialias)
-                {
-                    using (ctx.PushRenderOptions(new RenderOptions
-                    {
-                        EdgeMode = EdgeMode.Aliased,
-                        BitmapInterpolationMode = BitmapInterpolationMode.None,
-                    }))
-                    {
-                        label.Draw(ctx);
-                    }
-                }
-                else
-                {
-                    label.Draw(ctx);
-                }
-            }
-
-            using var ms = new MemoryStream();
-            rtb.Save(ms);
-            return ms.ToArray();
-#endif
-        }
+        /// <summary>Rasterise a built <see cref="Rendering.LabelDrawing"/> to a PNG byte array at 96 dpi.</summary>
+        public static byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias) => Platform.RenderToPng(label, antialias);
     }
 }

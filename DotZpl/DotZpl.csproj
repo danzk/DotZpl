@@ -14,17 +14,20 @@
     <DefineConstants>$(DefineConstants);WPF</DefineConstants>
   </PropertyGroup>
 
-  <!-- Avalonia target (cross-platform). Per-framework Controls split by file-name suffix. -->
+  <!-- Avalonia target (cross-platform). Per-framework source files are split by a file-name suffix
+       convention: *.Wpf.cs compiles only for the WPF TFM, *.Avalonia.cs only for the Avalonia TFM.
+       This is how the platform strategy (Compat / Platform) and the ZplLabelView control are kept
+       free of inline #if branching. -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <DefineConstants>$(DefineConstants);AVALONIA</DefineConstants>
   </PropertyGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="Avalonia" Version="12.0.4" />
     <PackageReference Include="Avalonia.Skia" Version="12.0.4" />
-    <Compile Remove="Controls\*.Wpf.cs" />
+    <Compile Remove="**\*.Wpf.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
-    <Compile Remove="Controls\*.Avalonia.cs" />
+    <Compile Remove="**\*.Avalonia.cs" />
   </ItemGroup>
 
   <!-- Embedded fonts: WPF loads them from a spilled temp file via GlyphTypeface(Uri); Avalonia loads
