@@ -226,13 +226,57 @@ namespace DotZpl.Rendering
             return (background, whiteRegion, images);
         }
 
+        /// <summary>
+        /// Accumulate <paramref name="b"/> additively into <paramref name="a"/>.
+        ///
+        /// <para><b>WPF:</b> uses a flat <see cref="GeometryGroup"/> with NonZero fill rather than
+        /// nesting another <see cref="CombinedGeometry"/> — the boolean Union evaluator is wasted
+        /// work for the common case of non-overlapping label elements, and WPF correctly flattens
+        /// child geometries' path data so children with their own holes (a CombinedGeometry border
+        /// ring, a multi-figure text glyph) keep them under the group's FillRule.</para>
+        ///
+        /// <para><b>Avalonia:</b> stays with <see cref="CombinedGeometry"/>. Avalonia 12's
+        /// GeometryGroup rasterises each child as an independently-filled shape and unions the
+        /// painted regions; a child's own holes (CombinedGeometry's Boolean op, a glyph path's
+        /// reverse-winding sub-figures) are lost, so a hollow GraphicBox border or the inside of
+        /// the letter 'o' re-fills. Until Avalonia's rasteriser flattens children the same way WPF
+        /// does, the safe path is the boolean Union — slower but correct.</para>
+        /// </summary>
         private static Geometry? Union(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
             if (b == null) return a;
+
+#if WPF
+            if (a is GeometryGroup group && group.FillRule == Compat.NonZeroFill && IsMutableAccumulator(group))
+            {
+                group.Children.Add(b);
+                return group;
+            }
+
+            var fresh = new GeometryGroup { FillRule = Compat.NonZeroFill };
+            fresh.Children.Add(a);
+            fresh.Children.Add(b);
+            return fresh;
+#else
             return new CombinedGeometry(GeometryCombineMode.Union, a, b);
+#endif
         }
 
+#if WPF
+        /// <summary>
+        /// Whether <paramref name="g"/> can safely accept more <see cref="GeometryGroup.Children"/>
+        /// — i.e. not frozen, and no enclosing transform that would then incorrectly apply to the
+        /// newly appended child.
+        /// </summary>
+        private static bool IsMutableAccumulator(GeometryGroup g)
+        {
+            if (g.Transform != null && !g.Transform.Value.IsIdentity) return false;
+            return !g.IsFrozen;
+        }
+#endif
+
+        // Xor / Exclude genuinely need the boolean op — the GeometryGroup trick above doesn't apply.
         private static Geometry? Xor(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
