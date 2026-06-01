@@ -309,6 +309,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
                 byte[] png = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
                     .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm);
                 File.WriteAllBytes(path, png);
+                SystemShell.OpenInDefaultApp(path);
             }
             catch (Exception ex)
             {
@@ -381,6 +382,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
             if (path != null)
             {
                 File.WriteAllText(path, ZplText ?? string.Empty);
+                SystemShell.OpenInDefaultApp(path);
             }
         }
 
