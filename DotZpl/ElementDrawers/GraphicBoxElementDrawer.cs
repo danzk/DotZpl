@@ -77,7 +77,7 @@ namespace DotZpl.ElementDrawers
             else
             {
                 var inner = new RectangleGeometry(new Rect(baseX + border, top + border, iw, ih), rInner, rInner);
-                borderGeometry = Compat.Combine(outer, inner, GeometryCombineMode.Xor);
+                borderGeometry = Compat.MakeRing(outer, inner);
             }
 
             // Reverse always feeds the black bucket (the orchestrator decides background vs white XOR).

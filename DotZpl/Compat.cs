@@ -38,6 +38,36 @@ namespace DotZpl
 #endif
         }
 
+        /// <summary>
+        /// Build the "ring" shape (<paramref name="outer"/> minus <paramref name="inner"/>) as a
+        /// single non-boolean-op Geometry, per platform:
+        ///
+        /// <list type="bullet">
+        /// <item><b>WPF:</b> eager <see cref="Geometry.Combine(Geometry, Geometry, GeometryCombineMode, Transform)"/>
+        /// with <see cref="GeometryCombineMode.Xor"/> — returns a flat <see cref="PathGeometry"/>.
+        /// WPF's <see cref="GeometryGroup"/> renders each RectangleGeometry / EllipseGeometry child
+        /// as its own opaque filled primitive (FillRule does not punch holes between them), so the
+        /// group-with-EvenOdd trick doesn't work on this backend.</item>
+        /// <item><b>Avalonia:</b> two-child <see cref="GeometryGroup"/> with
+        /// <see cref="FillRule.EvenOdd"/>. Avalonia honours the fill rule across overlapping
+        /// children's contours, so the inner area sees count 2 (even, hole) and the border ring
+        /// sees count 1 (odd, filled). No Boolean op runs at render time — this avoids piling more
+        /// <see cref="CombinedGeometry"/> nodes on the Union pipeline, which was the dominant
+        /// per-element render cost on label-heavy renders.</item>
+        /// </list>
+        /// </summary>
+        public static Geometry MakeRing(Geometry outer, Geometry inner)
+        {
+#if WPF
+            return Geometry.Combine(outer, inner, GeometryCombineMode.Xor, null);
+#elif AVALONIA
+            var ring = new GeometryGroup { FillRule = FillRule.EvenOdd };
+            ring.Children.Add(outer);
+            ring.Children.Add(inner);
+            return ring;
+#endif
+        }
+
         /// <summary>Begin a filled, closed figure at <paramref name="p"/>.</summary>
         public static void Begin(this StreamGeometryContext ctx, Point p)
         {
