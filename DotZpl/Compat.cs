@@ -40,39 +40,30 @@ namespace DotZpl
 
         /// <summary>
         /// Build a rounded-rectangle "ring" (outer rect minus inner rect) as a single
-        /// <see cref="StreamGeometry"/> with two figures of opposite winding — outer clockwise,
-        /// inner counter-clockwise. Under NonZero fill the two windings cancel inside the inner
-        /// rect, producing the hole; under EvenOdd the same result follows from parity. Crucially,
-        /// the hole comes from contour winding (path data) rather than from a FillRule applied
-        /// across separate children, so it survives being nested inside an outer
-        /// <see cref="GeometryGroup"/> on either backend — Avalonia's <c>SKPath.AddPath</c>
-        /// preserves the directional vertex order when flattening children, and WPF treats this
-        /// as a single child geometry with its own internal contours.
+        /// <see cref="PathGeometry"/> with two figures of opposite winding — outer clockwise, inner
+        /// counter-clockwise. Under NonZero fill the two windings cancel inside the inner rect,
+        /// producing the hole. The hole comes from contour winding (path data), not from a FillRule
+        /// applied across separate children, so it survives a boolean combine and any geometry
+        /// nesting on both backends.
         /// </summary>
         public static Geometry MakeRectRing(Rect outerRect, double outerRadius, Rect innerRect, double innerRadius)
         {
-            var ring = new StreamGeometry();
-            using (StreamGeometryContext ctx = ring.Open())
-            {
-                EmitRectFigure(ctx, outerRect, outerRadius, clockwise: true);
-                EmitRectFigure(ctx, innerRect, innerRadius, clockwise: false);
-            }
+            PathGeometry ring = NewPathGeometry();
+            ring.Figures!.Add(BuildRectFigure(outerRect, outerRadius, clockwise: true));
+            ring.Figures!.Add(BuildRectFigure(innerRect, innerRadius, clockwise: false));
             return ring;
         }
 
         /// <summary>Elliptical equivalent of <see cref="MakeRectRing"/>.</summary>
         public static Geometry MakeEllipseRing(Point center, double outerRx, double outerRy, double innerRx, double innerRy)
         {
-            var ring = new StreamGeometry();
-            using (StreamGeometryContext ctx = ring.Open())
-            {
-                EmitEllipseFigure(ctx, center, outerRx, outerRy, clockwise: true);
-                EmitEllipseFigure(ctx, center, innerRx, innerRy, clockwise: false);
-            }
+            PathGeometry ring = NewPathGeometry();
+            ring.Figures!.Add(BuildEllipseFigure(center, outerRx, outerRy, clockwise: true));
+            ring.Figures!.Add(BuildEllipseFigure(center, innerRx, innerRy, clockwise: false));
             return ring;
         }
 
-        private static void EmitRectFigure(StreamGeometryContext ctx, Rect rect, double cornerRadius, bool clockwise)
+        private static PathFigure BuildRectFigure(Rect rect, double cornerRadius, bool clockwise)
         {
             double r = Math.Max(0, Math.Min(cornerRadius, Math.Min(rect.Width, rect.Height) / 2));
             double x = rect.X, y = rect.Y, w = rect.Width, h = rect.Height;
@@ -80,72 +71,102 @@ namespace DotZpl
             if (r <= 0)
             {
                 // Plain rectangle, four line segments.
+                PathFigure rectFig = NewFigure(new Point(x, y));
                 if (clockwise)
                 {
-                    ctx.Begin(new Point(x, y));
-                    ctx.Line(new Point(x + w, y));
-                    ctx.Line(new Point(x + w, y + h));
-                    ctx.Line(new Point(x, y + h));
+                    AddLine(rectFig, new Point(x + w, y));
+                    AddLine(rectFig, new Point(x + w, y + h));
+                    AddLine(rectFig, new Point(x, y + h));
                 }
                 else
                 {
-                    ctx.Begin(new Point(x, y));
-                    ctx.Line(new Point(x, y + h));
-                    ctx.Line(new Point(x + w, y + h));
-                    ctx.Line(new Point(x + w, y));
+                    AddLine(rectFig, new Point(x, y + h));
+                    AddLine(rectFig, new Point(x + w, y + h));
+                    AddLine(rectFig, new Point(x + w, y));
                 }
-                ctx.End();
-                return;
+                return rectFig;
             }
 
             // Rounded rectangle. Each corner is a quarter-circle arc (small arc).
             var radSize = new Size(r, r);
+            PathFigure fig = NewFigure(new Point(x + r, y));
             if (clockwise)
             {
-                ctx.Begin(new Point(x + r, y));
-                ctx.Line(new Point(x + w - r, y));
-                Arc(ctx, new Point(x + w, y + r), radSize, clockwise: true);
-                ctx.Line(new Point(x + w, y + h - r));
-                Arc(ctx, new Point(x + w - r, y + h), radSize, clockwise: true);
-                ctx.Line(new Point(x + r, y + h));
-                Arc(ctx, new Point(x, y + h - r), radSize, clockwise: true);
-                ctx.Line(new Point(x, y + r));
-                Arc(ctx, new Point(x + r, y), radSize, clockwise: true);
+                AddLine(fig, new Point(x + w - r, y));
+                AddArc(fig, new Point(x + w, y + r), radSize, clockwise: true);
+                AddLine(fig, new Point(x + w, y + h - r));
+                AddArc(fig, new Point(x + w - r, y + h), radSize, clockwise: true);
+                AddLine(fig, new Point(x + r, y + h));
+                AddArc(fig, new Point(x, y + h - r), radSize, clockwise: true);
+                AddLine(fig, new Point(x, y + r));
+                AddArc(fig, new Point(x + r, y), radSize, clockwise: true);
             }
             else
             {
-                ctx.Begin(new Point(x + r, y));
-                Arc(ctx, new Point(x, y + r), radSize, clockwise: false);
-                ctx.Line(new Point(x, y + h - r));
-                Arc(ctx, new Point(x + r, y + h), radSize, clockwise: false);
-                ctx.Line(new Point(x + w - r, y + h));
-                Arc(ctx, new Point(x + w, y + h - r), radSize, clockwise: false);
-                ctx.Line(new Point(x + w, y + r));
-                Arc(ctx, new Point(x + w - r, y), radSize, clockwise: false);
-                ctx.Line(new Point(x + r, y));
+                AddArc(fig, new Point(x, y + r), radSize, clockwise: false);
+                AddLine(fig, new Point(x, y + h - r));
+                AddArc(fig, new Point(x + r, y + h), radSize, clockwise: false);
+                AddLine(fig, new Point(x + w - r, y + h));
+                AddArc(fig, new Point(x + w, y + h - r), radSize, clockwise: false);
+                AddLine(fig, new Point(x + w, y + r));
+                AddArc(fig, new Point(x + w - r, y), radSize, clockwise: false);
+                AddLine(fig, new Point(x + r, y));
             }
-            ctx.End();
+            return fig;
         }
 
-        private static void EmitEllipseFigure(StreamGeometryContext ctx, Point center, double rx, double ry, bool clockwise)
+        private static PathFigure BuildEllipseFigure(Point center, double rx, double ry, bool clockwise)
         {
             var size = new Size(rx, ry);
-            ctx.Begin(new Point(center.X, center.Y - ry));
+            PathFigure fig = NewFigure(new Point(center.X, center.Y - ry));
             // Two semi-arcs traversing the same direction give the full ellipse with consistent winding.
-            Arc(ctx, new Point(center.X, center.Y + ry), size, clockwise);
-            Arc(ctx, new Point(center.X, center.Y - ry), size, clockwise);
-            ctx.End();
+            AddArc(fig, new Point(center.X, center.Y + ry), size, clockwise);
+            AddArc(fig, new Point(center.X, center.Y - ry), size, clockwise);
+            return fig;
         }
 
-        /// <summary>StreamGeometryContext.ArcTo wrapper bridging WPF / Avalonia's signature drift.</summary>
-        private static void Arc(StreamGeometryContext ctx, Point endPoint, Size size, bool clockwise)
+        private static PathGeometry NewPathGeometry()
         {
 #if WPF
-            ctx.ArcTo(endPoint, size, 0, false,
-                clockwise ? SweepDirection.Clockwise : SweepDirection.Counterclockwise, true, false);
+            return new PathGeometry { FillRule = NonZeroFill };
 #elif AVALONIA
-            ctx.ArcTo(endPoint, size, 0, false,
-                clockwise ? SweepDirection.Clockwise : SweepDirection.CounterClockwise);
+            return new PathGeometry { FillRule = NonZeroFill, Figures = new PathFigures() };
+#endif
+        }
+
+        private static PathFigure NewFigure(Point start)
+        {
+#if WPF
+            return new PathFigure { StartPoint = start, IsClosed = true, IsFilled = true, Segments = new PathSegmentCollection() };
+#elif AVALONIA
+            return new PathFigure { StartPoint = start, IsClosed = true, Segments = new PathSegments() };
+#endif
+        }
+
+        private static void AddLine(PathFigure fig, Point p)
+        {
+#if WPF
+            fig.Segments!.Add(new LineSegment(p, false));
+#elif AVALONIA
+            fig.Segments!.Add(new LineSegment { Point = p });
+#endif
+        }
+
+        /// <summary>Append a quarter / semicircle arc to <paramref name="fig"/>, bridging the WPF / Avalonia ctor drift.</summary>
+        private static void AddArc(PathFigure fig, Point endPoint, Size size, bool clockwise)
+        {
+#if WPF
+            fig.Segments!.Add(new ArcSegment(endPoint, size, 0, false,
+                clockwise ? SweepDirection.Clockwise : SweepDirection.Counterclockwise, false));
+#elif AVALONIA
+            fig.Segments!.Add(new ArcSegment
+            {
+                Point = endPoint,
+                Size = size,
+                RotationAngle = 0,
+                IsLargeArc = false,
+                SweepDirection = clockwise ? SweepDirection.Clockwise : SweepDirection.CounterClockwise,
+            });
 #endif
         }
 
