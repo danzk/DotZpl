@@ -53,18 +53,16 @@ namespace DotZpl.ElementDrawers
             }
 
             var center = new Point(cx, cy);
-            var outer = Compat.Ellipse(center, radius, radius);
 
             Geometry borderGeometry;
             double innerRadius = radius - border;
             if (innerRadius <= 0)
             {
-                borderGeometry = outer;
+                borderGeometry = Compat.Ellipse(center, radius, radius);
             }
             else
             {
-                var inner = Compat.Ellipse(center, innerRadius, innerRadius);
-                borderGeometry = Compat.MakeRing(outer, inner);
+                borderGeometry = Compat.MakeEllipseRing(center, radius, radius, innerRadius, innerRadius);
             }
 
             if (!graphicCircle.ReversePrint && graphicCircle.LineColor == LineColor.White)

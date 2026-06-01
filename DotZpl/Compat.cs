@@ -39,32 +39,113 @@ namespace DotZpl
         }
 
         /// <summary>
-        /// Build the "ring" shape (<paramref name="outer"/> minus <paramref name="inner"/>) as a
-        /// single non-boolean-op Geometry, per platform:
-        ///
-        /// <list type="bullet">
-        /// <item><b>WPF:</b> eager <see cref="Geometry.Combine(Geometry, Geometry, GeometryCombineMode, Transform)"/>
-        /// with <see cref="GeometryCombineMode.Xor"/> — returns a flat <see cref="PathGeometry"/>.
-        /// WPF's <see cref="GeometryGroup"/> renders each RectangleGeometry / EllipseGeometry child
-        /// as its own opaque filled primitive (FillRule does not punch holes between them), so the
-        /// group-with-EvenOdd trick doesn't work on this backend.</item>
-        /// <item><b>Avalonia:</b> two-child <see cref="GeometryGroup"/> with
-        /// <see cref="FillRule.EvenOdd"/>. Avalonia honours the fill rule across overlapping
-        /// children's contours, so the inner area sees count 2 (even, hole) and the border ring
-        /// sees count 1 (odd, filled). No Boolean op runs at render time — this avoids piling more
-        /// <see cref="CombinedGeometry"/> nodes on the Union pipeline, which was the dominant
-        /// per-element render cost on label-heavy renders.</item>
-        /// </list>
+        /// Build a rounded-rectangle "ring" (outer rect minus inner rect) as a single
+        /// <see cref="StreamGeometry"/> with two figures of opposite winding — outer clockwise,
+        /// inner counter-clockwise. Under NonZero fill the two windings cancel inside the inner
+        /// rect, producing the hole; under EvenOdd the same result follows from parity. Crucially,
+        /// the hole comes from contour winding (path data) rather than from a FillRule applied
+        /// across separate children, so it survives being nested inside an outer
+        /// <see cref="GeometryGroup"/> on either backend — Avalonia's <c>SKPath.AddPath</c>
+        /// preserves the directional vertex order when flattening children, and WPF treats this
+        /// as a single child geometry with its own internal contours.
         /// </summary>
-        public static Geometry MakeRing(Geometry outer, Geometry inner)
+        public static Geometry MakeRectRing(Rect outerRect, double outerRadius, Rect innerRect, double innerRadius)
+        {
+            var ring = new StreamGeometry();
+            using (StreamGeometryContext ctx = ring.Open())
+            {
+                EmitRectFigure(ctx, outerRect, outerRadius, clockwise: true);
+                EmitRectFigure(ctx, innerRect, innerRadius, clockwise: false);
+            }
+            return ring;
+        }
+
+        /// <summary>Elliptical equivalent of <see cref="MakeRectRing"/>.</summary>
+        public static Geometry MakeEllipseRing(Point center, double outerRx, double outerRy, double innerRx, double innerRy)
+        {
+            var ring = new StreamGeometry();
+            using (StreamGeometryContext ctx = ring.Open())
+            {
+                EmitEllipseFigure(ctx, center, outerRx, outerRy, clockwise: true);
+                EmitEllipseFigure(ctx, center, innerRx, innerRy, clockwise: false);
+            }
+            return ring;
+        }
+
+        private static void EmitRectFigure(StreamGeometryContext ctx, Rect rect, double cornerRadius, bool clockwise)
+        {
+            double r = Math.Max(0, Math.Min(cornerRadius, Math.Min(rect.Width, rect.Height) / 2));
+            double x = rect.X, y = rect.Y, w = rect.Width, h = rect.Height;
+
+            if (r <= 0)
+            {
+                // Plain rectangle, four line segments.
+                if (clockwise)
+                {
+                    ctx.Begin(new Point(x, y));
+                    ctx.Line(new Point(x + w, y));
+                    ctx.Line(new Point(x + w, y + h));
+                    ctx.Line(new Point(x, y + h));
+                }
+                else
+                {
+                    ctx.Begin(new Point(x, y));
+                    ctx.Line(new Point(x, y + h));
+                    ctx.Line(new Point(x + w, y + h));
+                    ctx.Line(new Point(x + w, y));
+                }
+                ctx.End();
+                return;
+            }
+
+            // Rounded rectangle. Each corner is a quarter-circle arc (small arc).
+            var radSize = new Size(r, r);
+            if (clockwise)
+            {
+                ctx.Begin(new Point(x + r, y));
+                ctx.Line(new Point(x + w - r, y));
+                Arc(ctx, new Point(x + w, y + r), radSize, clockwise: true);
+                ctx.Line(new Point(x + w, y + h - r));
+                Arc(ctx, new Point(x + w - r, y + h), radSize, clockwise: true);
+                ctx.Line(new Point(x + r, y + h));
+                Arc(ctx, new Point(x, y + h - r), radSize, clockwise: true);
+                ctx.Line(new Point(x, y + r));
+                Arc(ctx, new Point(x + r, y), radSize, clockwise: true);
+            }
+            else
+            {
+                ctx.Begin(new Point(x + r, y));
+                Arc(ctx, new Point(x, y + r), radSize, clockwise: false);
+                ctx.Line(new Point(x, y + h - r));
+                Arc(ctx, new Point(x + r, y + h), radSize, clockwise: false);
+                ctx.Line(new Point(x + w - r, y + h));
+                Arc(ctx, new Point(x + w, y + h - r), radSize, clockwise: false);
+                ctx.Line(new Point(x + w, y + r));
+                Arc(ctx, new Point(x + w - r, y), radSize, clockwise: false);
+                ctx.Line(new Point(x + r, y));
+            }
+            ctx.End();
+        }
+
+        private static void EmitEllipseFigure(StreamGeometryContext ctx, Point center, double rx, double ry, bool clockwise)
+        {
+            var size = new Size(rx, ry);
+            ctx.Begin(new Point(center.X, center.Y - ry));
+            // Two semi-arcs traversing the same direction give the full ellipse with consistent winding.
+            Arc(ctx, new Point(center.X, center.Y + ry), size, clockwise);
+            Arc(ctx, new Point(center.X, center.Y - ry), size, clockwise);
+            ctx.End();
+        }
+
+        /// <summary>StreamGeometryContext.ArcTo wrapper bridging WPF / Avalonia's signature drift.</summary>
+        private static void Arc(StreamGeometryContext ctx, Point endPoint, Size size, bool clockwise)
         {
 #if WPF
-            return Geometry.Combine(outer, inner, GeometryCombineMode.Xor, null);
+            ctx.ArcTo(endPoint, size, 0, false,
+                clockwise ? SweepDirection.Clockwise : SweepDirection.Counterclockwise, true, false);
 #elif AVALONIA
-            var ring = new GeometryGroup { FillRule = FillRule.EvenOdd };
-            ring.Children.Add(outer);
-            ring.Children.Add(inner);
-            return ring;
+            ctx.ArcTo(endPoint, size, 0, false,
+                clockwise ? SweepDirection.Clockwise : SweepDirection.CounterClockwise);
 #endif
         }
 

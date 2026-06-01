@@ -227,27 +227,36 @@ namespace DotZpl.Rendering
         }
 
         /// <summary>
-        /// Accumulate <paramref name="b"/> additively into <paramref name="a"/>.
+        /// Accumulate <paramref name="b"/> additively into <paramref name="a"/> as a flat
+        /// <see cref="GeometryGroup"/> with NonZero fill. The boolean Union evaluator is wasted
+        /// work for the common case of non-overlapping label elements, and the children's own
+        /// holes — borders built via <c>Compat.MakeRectRing</c> / <c>Compat.MakeEllipseRing</c>
+        /// with opposite-winding contours, and glyph paths whose figures already have opposite
+        /// winding — survive flattening into the outer group because the hole comes from path
+        /// data (vertex direction) rather than from a child's FillRule.
         ///
-        /// <para><b>WPF:</b> uses a flat <see cref="GeometryGroup"/> with NonZero fill rather than
-        /// nesting another <see cref="CombinedGeometry"/> — the boolean Union evaluator is wasted
-        /// work for the common case of non-overlapping label elements, and WPF correctly flattens
-        /// child geometries' path data so children with their own holes (a MakeRing border, a
-        /// multi-figure text glyph) keep them under the group's FillRule.</para>
-        ///
-        /// <para><b>Avalonia:</b> stays with <see cref="CombinedGeometry"/>. When an Avalonia
-        /// <see cref="GeometryGroup"/> wraps children whose own holes come from FillRule (a
-        /// MakeRing GeometryGroup, a multi-figure glyph PathGeometry), the outer group loses
-        /// those holes — Avalonia's rasteriser unions the children's painted regions rather than
-        /// flattening their contours through the outer FillRule. CombinedGeometry(Union, …) is
-        /// slower at render but preserves correctness.</para>
+        /// <para>Works the same on both backends: Avalonia's <c>SKPath.AddPath</c> preserves
+        /// directional vertex order when combining children, so a CW outer contour and CCW inner
+        /// contour add up to zero in the cutout under NonZero. Reuses an existing accumulating
+        /// group when we can so the running background stays a single shallow group across many
+        /// additions.</para>
         /// </summary>
         private static Geometry? Union(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
             if (b == null) return a;
 
-#if WPF
+            // On Avalonia, Xor / Exclude return a lazy CombinedGeometry (Geometry.Combine there
+            // can't take two arbitrary operands), and wrapping that lazy node in a GeometryGroup
+            // loses the boolean op — the outer NonZero rule doesn't propagate the child's
+            // CombinedMode. Fall back to a boolean CombinedGeometry(Union) for that one step so
+            // the Xor / Exclude semantics survive. WPF never hits this branch because its
+            // Geometry.Combine evaluates eagerly and returns a flat PathGeometry.
+            if (a is CombinedGeometry || b is CombinedGeometry)
+            {
+                return new CombinedGeometry(GeometryCombineMode.Union, a, b);
+            }
+
             if (a is GeometryGroup group && group.FillRule == Compat.NonZeroFill && IsMutableAccumulator(group))
             {
                 group.Children.Add(b);
@@ -258,23 +267,22 @@ namespace DotZpl.Rendering
             fresh.Children.Add(a);
             fresh.Children.Add(b);
             return fresh;
-#else
-            return new CombinedGeometry(GeometryCombineMode.Union, a, b);
-#endif
         }
 
-#if WPF
         /// <summary>
         /// Whether <paramref name="g"/> can safely accept more <see cref="GeometryGroup.Children"/>
-        /// — i.e. not frozen, and no enclosing transform that would then incorrectly apply to the
-        /// newly appended child.
+        /// — i.e. not frozen on WPF (Avalonia geometries are always mutable), and no enclosing
+        /// transform that would then incorrectly apply to the newly appended child.
         /// </summary>
         private static bool IsMutableAccumulator(GeometryGroup g)
         {
             if (g.Transform != null && !g.Transform.Value.IsIdentity) return false;
+#if WPF
             return !g.IsFrozen;
-        }
+#else
+            return true;
 #endif
+        }
 
         // Xor / Exclude genuinely need the boolean op — the GeometryGroup trick above doesn't
         // apply. Compat.Combine evaluates eagerly on WPF (one flat PathGeometry, no tree to walk

@@ -163,10 +163,6 @@ namespace DotZpl.ElementDrawers
         }
 
         private static Geometry Annulus(Point center, double outerRadius, double innerRadius)
-        {
-            var outer = Compat.Ellipse(center, outerRadius, outerRadius);
-            var inner = Compat.Ellipse(center, innerRadius, innerRadius);
-            return Compat.MakeRing(outer, inner);
-        }
+            => Compat.MakeEllipseRing(center, outerRadius, outerRadius, innerRadius, innerRadius);
     }
 }

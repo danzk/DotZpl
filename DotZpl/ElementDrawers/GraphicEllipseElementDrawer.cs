@@ -44,19 +44,19 @@ namespace DotZpl.ElementDrawers
             }
 
             var center = new Point(x + width / 2.0, y + height / 2.0);
-            var outer = Compat.Ellipse(center, width / 2.0, height / 2.0);
+            double outerRx = width / 2.0;
+            double outerRy = height / 2.0;
 
             Geometry borderGeometry;
-            double innerRx = width / 2.0 - border;
-            double innerRy = height / 2.0 - border;
+            double innerRx = outerRx - border;
+            double innerRy = outerRy - border;
             if (innerRx <= 0 || innerRy <= 0)
             {
-                borderGeometry = outer;
+                borderGeometry = Compat.Ellipse(center, outerRx, outerRy);
             }
             else
             {
-                var inner = Compat.Ellipse(center, innerRx, innerRy);
-                borderGeometry = Compat.MakeRing(outer, inner);
+                borderGeometry = Compat.MakeEllipseRing(center, outerRx, outerRy, innerRx, innerRy);
             }
 
             context.AddBlack(borderGeometry);
