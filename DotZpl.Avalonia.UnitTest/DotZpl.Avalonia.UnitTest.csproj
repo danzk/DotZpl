@@ -17,9 +17,19 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
 
-  <!-- References the Avalonia (net10.0) TFM of the rendering library. -->
+  <!-- References the Avalonia (net10.0) TFM of the renderer for the candidate side, plus the Skia
+       renderer for the reference side. The Skia drawer runs on any thread and just produces bytes,
+       so it composes fine with the Avalonia headless UI thread used by [AvaloniaFact]. -->
   <ItemGroup>
     <ProjectReference Include="..\DotZpl\DotZpl.csproj" />
+    <ProjectReference Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Viewer\BinaryKits.Zpl.Viewer.csproj" />
+  </ItemGroup>
+
+  <!-- Sample labels (Example/ and Test/) used by per-label reproducers; copied next to the test dll. -->
+  <ItemGroup>
+    <Content Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Viewer.WebApi\Labels\**\*.zpl2"
+             Link="Labels\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -1,12 +1,12 @@
 using Avalonia;
 using Avalonia.Headless;
 
-using DotZpl.Avalonia.SmokeTest;
+using DotZpl.Avalonia.UnitTest;
 
 // Tells Avalonia.Headless.XUnit how to build the app for [AvaloniaFact] tests.
 [assembly: AvaloniaTestApplication(typeof(SmokeAppBuilder))]
 
-namespace DotZpl.Avalonia.SmokeTest
+namespace DotZpl.Avalonia.UnitTest
 {
     /// <summary>Minimal Avalonia application host for the headless render tests.</summary>
     public class App : Application
