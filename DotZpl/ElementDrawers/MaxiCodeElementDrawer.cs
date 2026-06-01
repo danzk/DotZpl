@@ -166,7 +166,7 @@ namespace DotZpl.ElementDrawers
         {
             var outer = Compat.Ellipse(center, outerRadius, outerRadius);
             var inner = Compat.Ellipse(center, innerRadius, innerRadius);
-            return new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
+            return Compat.Combine(outer, inner, GeometryCombineMode.Exclude);
         }
     }
 }

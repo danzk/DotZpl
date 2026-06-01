@@ -276,19 +276,22 @@ namespace DotZpl.Rendering
         }
 #endif
 
-        // Xor / Exclude genuinely need the boolean op — the GeometryGroup trick above doesn't apply.
+        // Xor / Exclude genuinely need the boolean op — the GeometryGroup trick above doesn't
+        // apply. Compat.Combine evaluates eagerly on WPF (one flat PathGeometry, no tree to walk
+        // at rasterise time) and stays with the lazy CombinedGeometry on Avalonia (where
+        // Geometry.Combine's second operand is restricted to RectangleGeometry).
         private static Geometry? Xor(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
             if (b == null) return a;
-            return new CombinedGeometry(GeometryCombineMode.Xor, a, b);
+            return Compat.Combine(a, b, GeometryCombineMode.Xor);
         }
 
         private static Geometry? Exclude(Geometry? a, Geometry? b)
         {
             if (a == null) return null;
             if (b == null) return a;
-            return new CombinedGeometry(GeometryCombineMode.Exclude, a, b);
+            return Compat.Combine(a, b, GeometryCombineMode.Exclude);
         }
 
         private static Exception DescribeElementError(ZplElementBase element, Exception ex)

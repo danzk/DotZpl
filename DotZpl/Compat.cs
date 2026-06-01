@@ -20,6 +20,24 @@ namespace DotZpl
         public const FillRule NonZeroFill = FillRule.NonZero;
 #endif
 
+        /// <summary>
+        /// Combine two geometries with a boolean op. WPF uses the static
+        /// <see cref="Geometry.Combine(Geometry, Geometry, GeometryCombineMode, Transform)"/>,
+        /// which evaluates eagerly and returns a flattened <see cref="PathGeometry"/> — no deep
+        /// CombinedGeometry tree to walk at rasterise time. Avalonia 12's
+        /// <c>Geometry.Combine</c> restricts the second operand to <c>RectangleGeometry</c> only,
+        /// so we can't use it for arbitrary shapes (ring borders, annuli, glyph paths) — the
+        /// Avalonia path stays with the lazy <see cref="CombinedGeometry"/>.
+        /// </summary>
+        public static Geometry Combine(Geometry a, Geometry b, GeometryCombineMode mode)
+        {
+#if WPF
+            return Geometry.Combine(a, b, mode, null);
+#elif AVALONIA
+            return new CombinedGeometry(mode, a, b);
+#endif
+        }
+
         /// <summary>Begin a filled, closed figure at <paramref name="p"/>.</summary>
         public static void Begin(this StreamGeometryContext ctx, Point p)
         {

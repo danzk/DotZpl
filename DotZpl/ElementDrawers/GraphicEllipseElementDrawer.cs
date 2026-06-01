@@ -56,7 +56,7 @@ namespace DotZpl.ElementDrawers
             else
             {
                 var inner = Compat.Ellipse(center, innerRx, innerRy);
-                borderGeometry = new CombinedGeometry(GeometryCombineMode.Xor, outer, inner);
+                borderGeometry = Compat.Combine(outer, inner, GeometryCombineMode.Xor);
             }
 
             context.AddBlack(borderGeometry);

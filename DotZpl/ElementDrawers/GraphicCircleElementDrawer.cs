@@ -64,7 +64,7 @@ namespace DotZpl.ElementDrawers
             else
             {
                 var inner = Compat.Ellipse(center, innerRadius, innerRadius);
-                borderGeometry = new CombinedGeometry(GeometryCombineMode.Xor, outer, inner);
+                borderGeometry = Compat.Combine(outer, inner, GeometryCombineMode.Xor);
             }
 
             if (!graphicCircle.ReversePrint && graphicCircle.LineColor == LineColor.White)
