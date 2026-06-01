@@ -129,6 +129,9 @@ namespace DotZpl.Viewer.Shared.ViewModels
         private double _offsetY;
         public double OffsetY { get => _offsetY; set => SetProperty(ref _offsetY, value); }
 
+        private double _zoom = 1.0;
+        public double Zoom { get => _zoom; set => SetProperty(ref _zoom, value); }
+
         #endregion
 
         #region Preview (what the control renders) + diagnostics
@@ -168,6 +171,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
             RotationAngle = 0;
             OffsetX = 0;
             OffsetY = 0;
+            Zoom = 1.0;
         }
 
         private void LoadLabel(LabelItem item)

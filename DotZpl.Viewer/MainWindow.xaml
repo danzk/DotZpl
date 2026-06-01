@@ -87,6 +87,11 @@
                     <Slider Minimum="-1000" Maximum="1000" Value="{Binding OffsetY}" Width="130"
                             VerticalAlignment="Center" Margin="0,0,14,0" />
 
+                    <TextBlock Text="Zoom:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                    <Slider Minimum="0.1" Maximum="20" Value="{Binding Zoom}" Width="130"
+                            VerticalAlignment="Center" Margin="0,0,4,0" />
+                    <TextBlock Text="{Binding Zoom, StringFormat={}{0:P0}}" VerticalAlignment="Center" Width="44" Margin="0,0,14,0" />
+
                     <Button Content="Reset" Command="{Binding ResetTransformCommand}" Padding="10,2" />
                 </WrapPanel>
             </Border>
@@ -121,8 +126,9 @@
                                   LabelHeight="{Binding PreviewHeight}"
                                   PrintDensityDpmm="{Binding PreviewDpmm}"
                                   RotationAngle="{Binding RotationAngle}"
-                                  OffsetX="{Binding OffsetX}"
-                                  OffsetY="{Binding OffsetY}"
+                                  OffsetX="{Binding OffsetX, Mode=TwoWay}"
+                                  OffsetY="{Binding OffsetY, Mode=TwoWay}"
+                                  Zoom="{Binding Zoom, Mode=TwoWay}"
                                   Stretch="Uniform" Margin="10" />
             </Border>
         </DockPanel>

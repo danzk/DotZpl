@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 
 using BinaryKits.Zpl.Label.Elements;
@@ -19,10 +20,20 @@ namespace DotZpl.Controls
     /// <c>ZplLabelView.Wpf.cs</c> with the Avalonia property and rendering APIs.
     ///
     /// <para>The label is rendered in ZPL dots (1 dot = 1 device-independent unit) and then scaled /
-    /// rotated to fit the control, so it stays crisp at any size.</para>
+    /// rotated to fit the control, so it stays crisp at any size. Drag with the left mouse button to
+    /// pan and use the wheel to zoom toward the cursor (<see cref="Zoom"/>, <see cref="OffsetX"/>,
+    /// <see cref="OffsetY"/>).</para>
     /// </summary>
     public class ZplLabelView : Control
     {
+        private const double MinZoom = 0.1;
+        private const double MaxZoom = 20.0;
+        private const double ZoomStep = 1.15;   // per wheel notch
+
+        private bool _panning;
+        private Point _panStart;
+        private double _panStartOffsetX;
+        private double _panStartOffsetY;
         // Cached label tuple (background/whiteRegion/images) — rebuilt only on content change.
         // We hold a LabelDrawing rather than a DrawingGroup because Avalonia 12's DrawingGroup
         // recording context can't carry image draws and its declarative children carry no per-child
@@ -63,6 +74,11 @@ namespace DotZpl.Controls
         public static readonly StyledProperty<double> OffsetYProperty =
             AvaloniaProperty.Register<ZplLabelView, double>(nameof(OffsetY), 0.0);
 
+        /// <summary>User zoom factor applied on top of the <see cref="Stretch"/> fit (1.0 = fit).</summary>
+        public static readonly StyledProperty<double> ZoomProperty =
+            AvaloniaProperty.Register<ZplLabelView, double>(nameof(Zoom), 1.0,
+                coerce: (_, v) => Math.Clamp(v, MinZoom, MaxZoom));
+
         static ZplLabelView()
         {
             // Properties that change the *content* of the cached drawing — must be invalidated and
@@ -71,8 +87,8 @@ namespace DotZpl.Controls
                 ZplProperty, LabelWidthProperty, LabelHeightProperty, PrintDensityDpmmProperty,
                 RotationAngleProperty, StretchProperty, OpaqueBackgroundProperty, OptionsProperty);
 
-            // Pan only affects the visual, not the natural size.
-            AffectsRender<ZplLabelView>(OffsetXProperty, OffsetYProperty);
+            // Pan / zoom only affect the visual, not the natural size.
+            AffectsRender<ZplLabelView>(OffsetXProperty, OffsetYProperty, ZoomProperty);
         }
 
         public string? Zpl { get => GetValue(ZplProperty); set => SetValue(ZplProperty, value); }
@@ -85,6 +101,7 @@ namespace DotZpl.Controls
         public ZplRendererOptions? Options { get => GetValue(OptionsProperty); set => SetValue(OptionsProperty, value); }
         public double OffsetX { get => GetValue(OffsetXProperty); set => SetValue(OffsetXProperty, value); }
         public double OffsetY { get => GetValue(OffsetYProperty); set => SetValue(OffsetYProperty, value); }
+        public double Zoom { get => GetValue(ZoomProperty); set => SetValue(ZoomProperty, value); }
 
         #endregion
 
@@ -180,25 +197,25 @@ namespace DotZpl.Controls
             return new Size(width, height);
         }
 
-        public override void Render(DrawingContext context)
+        /// <summary>
+        /// The content→viewport matrix at a given zoom, <em>without</em> the pan offset (rotate about
+        /// the label centre → move the rotated bbox to the origin → fit-scale × zoom → centre in the
+        /// viewport). The pan is a pure post-translation, so keeping it out lets the wheel handler map
+        /// the cursor to a content point and back across a zoom change to anchor the zoom there.
+        /// </summary>
+        private bool TryBuildBaseMatrix(double zoom, out Matrix matrix)
         {
-            EnsureDrawing();
-            if (_drawing == null)
-            {
-                return;
-            }
-
+            matrix = Matrix.Identity;
             Rect rb = RotatedBounds();
             Size viewport = Bounds.Size;
             if (rb.Width <= 0 || rb.Height <= 0 || viewport.Width <= 0 || viewport.Height <= 0)
             {
-                return;
+                return false;
             }
 
-            // Scale the label to the viewport per Stretch (independent of the pan offset).
             double sx = viewport.Width / rb.Width;
             double sy = viewport.Height / rb.Height;
-            (double scaleX, double scaleY) = Stretch switch
+            (double fitX, double fitY) = Stretch switch
             {
                 Stretch.None => (1.0, 1.0),
                 Stretch.Fill => (sx, sy),
@@ -206,26 +223,117 @@ namespace DotZpl.Controls
                 _ => (Math.Min(sx, sy), Math.Min(sx, sy)),   // Uniform
             };
 
-            // Centre the scaled label in the viewport, then apply the pan (the pan only translates —
-            // it does not affect the scale, so the label keeps its size).
-            double scaledWidth = rb.Width * scaleX;
-            double scaledHeight = rb.Height * scaleY;
-            double centreAndPanX = (viewport.Width - scaledWidth) / 2 + OffsetX;
-            double centreAndPanY = (viewport.Height - scaledHeight) / 2 + OffsetY;
+            double scaleX = fitX * zoom;
+            double scaleY = fitY * zoom;
+            double centreX = (viewport.Width - rb.Width * scaleX) / 2;
+            double centreY = (viewport.Height - rb.Height * scaleY) / 2;
 
             Size label = LabelSizeDots();
-            // Compose: rotate about label centre -> translate rotated-bbox to origin -> scale -> centre+pan.
-            Matrix transform = RotationMatrix(label)
-                             * Matrix.CreateTranslation(-rb.X, -rb.Y)
-                             * Matrix.CreateScale(scaleX, scaleY)
-                             * Matrix.CreateTranslation(centreAndPanX, centreAndPanY);
+            matrix = RotationMatrix(label)
+                   * Matrix.CreateTranslation(-rb.X, -rb.Y)
+                   * Matrix.CreateScale(scaleX, scaleY)
+                   * Matrix.CreateTranslation(centreX, centreY);
+            return true;
+        }
 
+        public override void Render(DrawingContext context)
+        {
+            EnsureDrawing();
+
+            // Fill the viewport with a transparent rect so the whole control is hit-testable (drag to
+            // pan anywhere, including the letterbox around the label), not just the inked content.
+            Size viewport = Bounds.Size;
+            context.FillRectangle(Brushes.Transparent, new Rect(viewport));
+
+            if (_drawing == null || !TryBuildBaseMatrix(Zoom, out Matrix baseMatrix))
+            {
+                return;
+            }
+
+            Matrix transform = baseMatrix * Matrix.CreateTranslation(OffsetX, OffsetY);
             using (context.PushClip(new Rect(viewport)))
             using (context.PushTransform(transform))
             {
                 // LabelDrawing.Draw paints straight into the live render-pass DrawingContext,
                 // so image elements work natively (no DrawingGroup recording, no RTB baking).
                 _drawing.Draw(context);
+            }
+        }
+
+        /// <summary>
+        /// Multiply <see cref="Zoom"/> by <paramref name="factor"/> (clamped) while keeping the content
+        /// point under <paramref name="center"/> (a point in control coordinates) fixed — i.e. zoom
+        /// toward that point, adjusting <see cref="OffsetX"/> / <see cref="OffsetY"/> to compensate.
+        /// </summary>
+        public void ZoomBy(double factor, Point center)
+        {
+            double oldZoom = Zoom;
+            double newZoom = Math.Clamp(oldZoom * factor, MinZoom, MaxZoom);
+            if (newZoom == oldZoom)
+            {
+                return;
+            }
+
+            if (TryBuildBaseMatrix(oldZoom, out Matrix oldMatrix) && oldMatrix.TryInvert(out Matrix inverse)
+                && TryBuildBaseMatrix(newZoom, out Matrix newMatrix))
+            {
+                Point content = new Point(center.X - OffsetX, center.Y - OffsetY).Transform(inverse);
+                Point screen = content.Transform(newMatrix);
+                Zoom = newZoom;
+                OffsetX = center.X - screen.X;
+                OffsetY = center.Y - screen.Y;
+            }
+            else
+            {
+                Zoom = newZoom;
+            }
+        }
+
+        protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+        {
+            base.OnPointerWheelChanged(e);
+            ZoomBy(e.Delta.Y >= 0 ? ZoomStep : 1.0 / ZoomStep, e.GetPosition(this));
+            e.Handled = true;
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            base.OnPointerPressed(e);
+
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _panning = true;
+                _panStart = e.GetPosition(this);
+                _panStartOffsetX = OffsetX;
+                _panStartOffsetY = OffsetY;
+                e.Pointer.Capture(this);
+                Cursor = new Cursor(StandardCursorType.SizeAll);
+                e.Handled = true;
+            }
+        }
+
+        protected override void OnPointerMoved(PointerEventArgs e)
+        {
+            base.OnPointerMoved(e);
+
+            if (_panning)
+            {
+                Point p = e.GetPosition(this);
+                OffsetX = _panStartOffsetX + (p.X - _panStart.X);
+                OffsetY = _panStartOffsetY + (p.Y - _panStart.Y);
+            }
+        }
+
+        protected override void OnPointerReleased(PointerReleasedEventArgs e)
+        {
+            base.OnPointerReleased(e);
+
+            if (_panning)
+            {
+                _panning = false;
+                e.Pointer.Capture(null);
+                Cursor = Cursor.Default;
+                e.Handled = true;
             }
         }
     }
