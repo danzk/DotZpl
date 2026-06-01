@@ -170,7 +170,12 @@ namespace DotZpl
         /// <summary>Pixel height of a decoded image.</summary>
         public static int PixelHeight(BitmapSource image) => Platform.PixelHeight(image);
 
-        /// <summary>Rasterise a built <see cref="Rendering.LabelDrawing"/> to a PNG byte array at 96 dpi.</summary>
-        public static byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias) => Platform.RenderToPng(label, antialias);
+        /// <summary>
+        /// Rasterise a built <see cref="Rendering.LabelDrawing"/> to a PNG byte array. <paramref name="scale"/>
+        /// is an integer supersample factor (≥ 1) over the native dot grid (see
+        /// <see cref="IPlatform.RenderToPng"/>).
+        /// </summary>
+        public static byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias, int scale = 1)
+            => Platform.RenderToPng(label, antialias, scale);
     }
 }

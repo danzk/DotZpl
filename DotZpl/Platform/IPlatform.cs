@@ -67,7 +67,12 @@ namespace DotZpl
         /// <summary>Pixel height of a decoded image.</summary>
         int PixelHeight(BitmapSource image);
 
-        /// <summary>Rasterise a built <see cref="Rendering.LabelDrawing"/> to a PNG byte array at 96 dpi.</summary>
-        byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias);
+        /// <summary>
+        /// Rasterise a built <see cref="Rendering.LabelDrawing"/> to a PNG byte array. <paramref name="scale"/>
+        /// is an integer supersample factor (≥ 1): the image is rendered at <c>scale</c>× the native dot
+        /// grid with the bitmap DPI raised to match (96 × scale), so the on-paper size is unchanged but the
+        /// pixel density — and print sharpness — grows.
+        /// </summary>
+        byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias, int scale);
     }
 }

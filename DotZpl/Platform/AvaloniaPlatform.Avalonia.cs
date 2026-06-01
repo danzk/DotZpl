@@ -75,9 +75,18 @@ namespace DotZpl
 
         public int PixelHeight(BitmapSource image) => image.PixelSize.Height;
 
-        public byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias)
+        public byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias, int scale)
         {
-            var rtb = new RenderTargetBitmap(new PixelSize(label.Width, label.Height), new Vector(96, 96));
+            if (scale < 1)
+            {
+                scale = 1;
+            }
+
+            // The label draws at the native dot grid; a DPI of 96*scale makes Avalonia scale each DIP to
+            // `scale` device pixels, so the buffer is `scale`× larger with crisp axis-aligned edges and
+            // higher-resolution curves — the on-paper size is unchanged.
+            var rtb = new RenderTargetBitmap(
+                new PixelSize(label.Width * scale, label.Height * scale), new Vector(96.0 * scale, 96.0 * scale));
             using (DrawingContext ctx = rtb.CreateDrawingContext())
             {
                 if (!antialias)

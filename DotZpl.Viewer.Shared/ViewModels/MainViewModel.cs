@@ -21,6 +21,11 @@ namespace DotZpl.Viewer.Shared.ViewModels
         // omits an explicit ":port", matching the BinaryKits viewer's hardcoded 9100.
         private const int DefaultPrinterPort = 9100;
 
+        // Integer supersample factor for the exported PNG: render at this many pixels per ZPL dot so the
+        // saved image stays sharp when an image viewer / printer scales it up. Native 8 dpmm (203 dpi) ×4
+        // ≈ 812 dpi.
+        private const int PngExportScale = 4;
+
         private readonly IDispatcher _dispatcher;
         private readonly IFileDialogService _fileDialog;
         private readonly IZplPrinterService _printer;
@@ -307,7 +312,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
                 }
 
                 byte[] png = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
-                    .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm);
+                    .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm, PngExportScale);
                 File.WriteAllBytes(path, png);
                 SystemShell.OpenInDefaultApp(path);
             }

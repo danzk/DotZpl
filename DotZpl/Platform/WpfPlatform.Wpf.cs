@@ -61,8 +61,13 @@ namespace DotZpl
 
         public int PixelHeight(BitmapSource image) => image.PixelHeight;
 
-        public byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias)
+        public byte[] RenderToPng(Rendering.LabelDrawing label, bool antialias, int scale)
         {
+            if (scale < 1)
+            {
+                scale = 1;
+            }
+
             var visual = new System.Windows.Media.DrawingVisual();
             if (!antialias)
             {
@@ -74,7 +79,12 @@ namespace DotZpl
                 label.Draw(dc);
             }
 
-            var rtb = new RenderTargetBitmap(label.Width, label.Height, 96, 96, PixelFormats.Pbgra32);
+            // The visual draws at the native dot grid (1 dot = 1 DIU). Raising the bitmap DPI to 96*scale
+            // maps each DIU to `scale` device pixels, so the buffer is `scale`× larger with no explicit
+            // transform — axis-aligned dot edges land on exact pixel boundaries (crisp), curves render at
+            // the higher resolution, and the on-paper size is unchanged.
+            var rtb = new RenderTargetBitmap(
+                label.Width * scale, label.Height * scale, 96.0 * scale, 96.0 * scale, PixelFormats.Pbgra32);
             rtb.Render(visual);
 
             var encoder = new PngBitmapEncoder();

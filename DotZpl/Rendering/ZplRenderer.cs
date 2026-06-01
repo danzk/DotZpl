@@ -132,18 +132,22 @@ namespace DotZpl.Rendering
             => CreateLabelDrawing(elements, labelWidth, labelHeight, printDensityDpmm).Draw(drawingContext);
 
         /// <summary>
-        /// Convenience: rasterise the label to a PNG byte array via <see cref="RenderTargetBitmap"/> at
-        /// 96 dpi. For live rendering prefer <see cref="CreateLabelDrawing"/> and its <c>Draw</c>; this
-        /// is for file export and image-based testing. On WPF this must run on an STA thread.
+        /// Convenience: rasterise the label to a PNG byte array via <see cref="RenderTargetBitmap"/>.
+        /// <paramref name="scale"/> is an integer supersample factor (≥ 1): 1 renders at the native dot
+        /// grid (1 dot = 1 px), higher values render at <c>scale</c>× the pixel density for a sharper
+        /// print without changing the on-paper size. For live rendering prefer
+        /// <see cref="CreateLabelDrawing"/> and its <c>Draw</c>; this is for file export and image-based
+        /// testing. On WPF this must run on an STA thread.
         /// </summary>
         public byte[] DrawPng(
             IEnumerable<ZplElementBase> elements,
             double labelWidth = 101.6,
             double labelHeight = 152.4,
-            int printDensityDpmm = 8)
+            int printDensityDpmm = 8,
+            int scale = 1)
         {
             LabelDrawing label = CreateLabelDrawing(elements, labelWidth, labelHeight, printDensityDpmm);
-            return Compat.RenderToPng(label, _options.Antialias);
+            return Compat.RenderToPng(label, _options.Antialias, scale);
         }
 
         private static (int width, int height) LabelSize(double labelWidth, double labelHeight, int printDensityDpmm)
