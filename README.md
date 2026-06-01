@@ -1,21 +1,29 @@
 # DotZpl
 
-A **managed-graphics rendering backend for ZPL labels** — targeting both **WPF**
-(`System.Windows.Media`) and **Avalonia** (`Avalonia.Media`) from a single multi-targeted source.
+A **ZPL label renderer and live-preview control for WPF and Avalonia** — for authoring ZPL and
+inspecting labels with a crisp, zoomable preview. It's built on each framework's own graphics
+(**WPF** `System.Windows.Media` / **Avalonia** `Avalonia.Media`) from a single multi-targeted source.
 Ported from the SkiaSharp renderer in [BinaryKits.Zpl](https://github.com/BinaryKits/BinaryKits.Zpl),
 it parses ZPL II with the upstream `BinaryKits.Zpl.Viewer` analyzer and renders each label element
 natively — as vector `Geometry` wherever possible — instead of SkiaSharp.
 
 The port is validated against the original Skia renderer: a test suite renders the same ZPL through
-both backends and compares the images (SSIM + pixel similarity), writing side-by-side comparison
-PNGs for visual inspection. A separate headless Avalonia smoke test exercises the Avalonia path.
+both backends and compares how closely the rendered images match, writing side-by-side comparison
+PNGs for visual inspection. A parallel headless suite runs the same comparisons through the Avalonia
+backend.
 
-## Why a managed-graphics backend?
+## Why DotZpl?
 
-The upstream viewer renders with SkiaSharp. This project provides a drop-in equivalent for
-applications that want to render ZPL through the host UI framework's own graphics stack — WPF on
-Windows, or Avalonia on any of its platforms — with three deliberate design choices that go beyond a
-1:1 port:
+DotZpl is built for an **IDE-like experience when authoring ZPL and inspecting labels**: edit the ZPL
+and watch the label update live, then **pan, zoom, and rotate** the preview to scrutinise fine detail
+— barcode modules, hairlines, small text — without it degrading into a blurry bitmap. The
+`ZplLabelView` control and the viewer apps below provide exactly this out of the box.
+
+What makes that possible is rendering each label as **native vector `Geometry`** in the host UI
+framework (WPF or Avalonia) rather than to a raster, the way the upstream SkiaSharp viewer does. The
+preview is a real scene graph, so it stays crisp at any zoom and pan / scale / rotate are cheap
+transform-only operations instead of re-renders. That same geometry-first approach also makes the
+trickier parts of ZPL exact:
 
 - **Everything is geometry.** Shapes, text, and barcodes are built as `Geometry` so they compose
   uniformly and support the Field Reverse operator faithfully.
@@ -38,11 +46,12 @@ DotZpl.Viewer.Shared/      MVVM view-models + platform-service interfaces (multi
 DotZpl.Viewer/             WPF viewer app (consumes Shared via WPF dispatcher/dialog impls)
 DotZpl.Viewer.Avalonia/    Avalonia viewer app (consumes Shared via Avalonia impls)
 DotZpl.UnitTest/           MSTest suite: Skia-vs-WPF image comparison
-  Support/                 render harness, comparer (SSIM/pixel), STA runner
+  Support/                 render harness, image comparer, STA runner
   Tests/                   one test class per element category
-DotZpl.Avalonia.SmokeTest/ headless Avalonia render smoke tests (xUnit v3)
+DotZpl.Avalonia.UnitTest/  headless xUnit v3 suite — the same comparisons on the Avalonia backend
 BinaryKits.Zpl/            git submodule (fork) — see split below
-DotZpl.slnx                solution (the headless Avalonia smoke test is built separately)
+tools/zplfont/             Python toolchain that builds the embedded pixel fonts (.pixfont → .ttf)
+DotZpl.slnx                solution (the headless Avalonia suite is built separately)
 ```
 
 `BinaryKits.Zpl` is a **git submodule**. Its `Viewer` assembly originally bundled the ZPL parser
@@ -74,8 +83,8 @@ git submodule update --init --recursive
 
 dotnet build DotZpl.slnx
 dotnet test  DotZpl.UnitTest/DotZpl.UnitTest.csproj
-# headless Avalonia smoke tests (kept outside the .slnx to avoid multi-TFM build races):
-dotnet test  DotZpl.Avalonia.SmokeTest/DotZpl.Avalonia.SmokeTest.csproj
+# headless Avalonia suite (kept outside the .slnx to avoid multi-TFM build races):
+dotnet test  DotZpl.Avalonia.UnitTest/DotZpl.Avalonia.UnitTest.csproj
 ```
 
 ## Usage
@@ -147,6 +156,34 @@ File.WriteAllBytes("label.png", png);
 | 2D barcodes | QR, Data Matrix, Aztec, PDF417, MaxiCode |
 | Images | `^GF` graphic field, `^IM` image move, `^XG` recall graphic, `~DG`/`~DY` downloads |
 
+## Fonts
+
+ZPL text selects either the **scalable font `0`** or one of the **fixed bitmap fonts** (`A`–`H`), each
+defined by the printer as a fixed dot matrix. DotZpl reproduces both, with custom embedded fonts for
+the bitmap families:
+
+- **Embedded pixel fonts.** `Resources/font-a|b|c.ttf` are bitmap-style fonts hand-matched to the
+  Zebra fixed-font matrices — **Font A** (9×5 dots), **Font B** (11×7, bold, caps-only), and
+  **Font C/D** (18×10). They render at exact integer multiples of their matrix cell
+  (size = cell × magnification), so a `^A` height snaps to the matrix exactly like the printer —
+  e.g. `^AD,52` and `^AD,54` both render at 3× = 54 dots. DotZpl deliberately omits the proportional
+  ×1.1 "Labelary correction" (which suits substituting a vector font and would oversize a fixed font
+  by ~10%), so the bitmap fonts stay pixel-exact.
+- **Scalable font `0`** resolves to a condensed sans-serif from a system stack (Swis721 Cn, TeX Gyre
+  Heros Cn, Roboto Condensed, …); on a machine with none of those it falls back to Arial squeezed to
+  ~0.86 width, since the real Zebra font 0 is condensed.
+- **`^GS` graphic symbols** use a fourth embedded font (`ZplGS.ttf`).
+
+All of this is driven by `ZplFontManager`, which is configurable: the font stacks, which font names
+are treated as pixel fonts (`IsPixelFont`), and the font-`0` fallback condense factor. Embedded fonts
+load per framework — Avalonia via `avares://`, WPF by spilling the resource to a content-addressed
+temp file (a `GlyphTypeface` can only be constructed from a URI).
+
+The pixel-font `.ttf`s are build outputs, not hand-edited binaries: the glyphs are authored as
+text-based ASCII-art `.pixfont` files and compiled to TTF by the Python toolchain in
+[`tools/zplfont/`](tools/zplfont/README.md), which sizes each font to its Zebra matrix so it renders
+exactly at `emSize = matrixHeight`. See that tool's README to edit a glyph or add a font.
+
 ## Viewer apps
 
 A small MVVM application that ports the WebApi's browser UI to the desktop: a Test/Example label
@@ -166,19 +203,21 @@ take a platform dependency; each app wires up its native implementation at start
 backends and asserts a similarity threshold. For each case it writes a three-panel
 `skia | wpf | diff` PNG to **`TestOutput/RenderComparisons/`** (git-ignored) for visual review.
 
-Typical parity against the Skia reference:
+Typical similarity to the Skia reference, scored from 0 to 1 where **1.0** means the images are
+identical (axis-aligned content matches pixel-for-pixel; the rest is scored for overall visual
+likeness, which tolerates sub-pixel anti-aliasing differences):
 
 - QR, Data Matrix, Aztec, PDF417 and raster images: **pixel-perfect** (module-exact geometry)
 - 1D barcodes and vector shapes: **> 0.99**
-- Text: **~0.96–0.99 SSIM**
-- MaxiCode: **~0.97 pixel / ~0.98 SSIM** — the only barcode where two aliased rasterisers
+- Text: **~0.96–0.99**
+- MaxiCode: **~0.97–0.98** — the only barcode where two aliased rasterisers
   disagree on non-axis-aligned hexagons; see `MaxiCodeElementDrawer` for the rationale
 - Full multi-element example labels: **~0.94–0.99**
 
 **Note on text weight:** both backends resolve to the *same* font files, but WPF's linear-coverage
 geometry fill renders text marginally heavier than Skia's gamma-corrected, hinted glyph rasteriser
 at small sizes. This is inherent to the two engines (it is not a font or weight mismatch) and does
-not affect SSIM; see the note in `DotZpl/Text/TextRenderer.cs`.
+not meaningfully affect the similarity scores; see the note in `DotZpl/Text/TextRenderer.cs`.
 
 ## License
 
