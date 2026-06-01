@@ -40,22 +40,30 @@
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                       Background="#DDDDDD" />
 
-        <!-- ZPL editor + parameters -->
+        <!-- ZPL editor -->
         <DockPanel Grid.Column="2">
-            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                <DockPanel Margin="0,0,0,4">
+            <TextBox Text="{Binding ZplText, Mode=TwoWay}"
+                     AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas"
+                     VerticalContentAlignment="Top" />
+        </DockPanel>
+
+        <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Background="#DDDDDD" />
+
+        <!-- Preview: label format / actions toolbar + transform toolbar + render + diagnostics -->
+        <DockPanel Grid.Column="4">
+            <Border DockPanel.Dock="Top" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6">
+                <WrapPanel>
                     <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <ComboBox ItemsSource="{Binding LabelFormats}" SelectedItem="{Binding SelectedFormat}"
-                              HorizontalAlignment="Left" Width="160">
+                              Width="160" Margin="0,0,14,0">
                         <ComboBox.ItemTemplate>
                             <DataTemplate DataType="vm:LabelFormat">
                                 <TextBlock Text="{Binding Display}" />
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                </DockPanel>
 
-                <WrapPanel Margin="0,2">
                     <TextBox Text="{Binding LabelWidth}" Width="50" />
                     <TextBlock Text="mm" VerticalAlignment="Center" Margin="3,0,2,0" />
                     <TextBlock Text="{Binding LabelWidthInch, StringFormat=({0} in)}" VerticalAlignment="Center" Margin="0,0,12,0" />
@@ -66,26 +74,14 @@
 
                     <TextBox Text="{Binding PrintDensityDpmm}" Width="40" />
                     <TextBlock Text="dpmm" VerticalAlignment="Center" Margin="3,0,2,0" />
-                    <TextBlock Text="{Binding Dpi, StringFormat=({0} dpi)}" VerticalAlignment="Center" />
-                </WrapPanel>
+                    <TextBlock Text="{Binding Dpi, StringFormat=({0} dpi)}" VerticalAlignment="Center" Margin="0,0,14,0" />
 
-                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                     <Button Content="Render" Command="{Binding RenderCommand}" Padding="12,3" Margin="0,0,6,0" />
                     <Button Content="Save PNG" Command="{Binding SavePngCommand}" Padding="12,3" Margin="0,0,6,0" />
                     <Button Content="Save ZPL" Command="{Binding SaveZplCommand}" Padding="12,3" />
-                </StackPanel>
-            </StackPanel>
+                </WrapPanel>
+            </Border>
 
-            <TextBox Text="{Binding ZplText, Mode=TwoWay}"
-                     AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas"
-                     VerticalContentAlignment="Top" />
-        </DockPanel>
-
-        <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      Background="#DDDDDD" />
-
-        <!-- Preview: transform toolbar + render + diagnostics -->
-        <DockPanel Grid.Column="4">
             <Border DockPanel.Dock="Top" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6">
                 <WrapPanel>
                     <TextBlock Text="Rotation:" VerticalAlignment="Center" Margin="0,0,4,0" />
