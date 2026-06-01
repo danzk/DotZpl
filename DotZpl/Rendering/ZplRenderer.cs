@@ -75,9 +75,8 @@ namespace DotZpl.Rendering
             int printDensityDpmm = 8)
         {
             (int width, int height) = LabelSize(labelWidth, labelHeight, printDensityDpmm);
-            (Geometry? background, Geometry? whiteRegion, List<ImageOp> images) =
-                BuildContent(elements, width, height, printDensityDpmm);
-            return new LabelDrawing(width, height, background, whiteRegion, images, _options.OpaqueBackground);
+            List<LabelOp> ops = BuildContent(elements, width, height, printDensityDpmm);
+            return new LabelDrawing(width, height, ops, _options.OpaqueBackground);
         }
 
 #if WPF
@@ -153,15 +152,28 @@ namespace DotZpl.Rendering
             return (Convert.ToInt32(labelWidth * printDensityDpmm), Convert.ToInt32(labelHeight * printDensityDpmm));
         }
 
-        /// <summary>Run the drawer pipeline, accumulating the black/white geometry regions and images.</summary>
-        private (Geometry? background, Geometry? whiteRegion, List<ImageOp> images) BuildContent(
+        /// <summary>
+        /// Run the drawer pipeline, emitting an ordered display list of fill / image ops. Drawing the
+        /// list in document order reproduces ZPL compositing by the painter's algorithm: additive
+        /// black unions visually (no boolean geometry, no winding cancellation), white over black
+        /// erases, images layer in order.
+        ///
+        /// <para>Field Reverse (<c>^FR</c>) is the one op that needs geometry boolean math, because a
+        /// DrawingContext can't raster-XOR: a reverse field XORs against everything painted under it.
+        /// We reproduce that as two paint ops — erase (white) where the field overlaps the visible
+        /// black, and add (black) where it doesn't — using the visible-black region at that point. That
+        /// region is folded lazily from the ops emitted so far the first time a reverse element appears
+        /// and then maintained incrementally, so labels without <c>^FR</c> (the overwhelming majority)
+        /// run boolean-op-free.</para>
+        /// </summary>
+        private List<LabelOp> BuildContent(
             IEnumerable<ZplElementBase> elements, int width, int height, int printDensityDpmm)
         {
             var context = new DrawContext(width, height);
+            var ops = new List<LabelOp>();
 
-            Geometry? background = null;   // running black region
-            Geometry? whiteRegion = null;  // running explicit-white region
-            var images = new List<ImageOp>();
+            Geometry? visibleBlack = null;   // composite black region, only tracked once a reverse needs it
+            bool trackingBlack = false;
 
             InternationalFont internationalFont = InternationalFont.ZCP850;
             Point currentDefaultPosition = new(0, 0);
@@ -187,34 +199,53 @@ namespace DotZpl.Rendering
 
                     Geometry? black = context.TakeBlack();
                     Geometry? white = context.TakeWhite();
-                    images.AddRange(context.TakeImages());
 
-                    // Two regions are maintained in document order: `background` (black pixels) and
-                    // `whiteRegion` (explicit white pixels, needed only when the final background is
-                    // transparent). Every element mutually excludes itself from the *other* region so
-                    // that a later element correctly paints over an earlier one — e.g. a black border
-                    // drawn last must show through white shapes drawn before it.
                     if (drawer.IsReverseDraw(element))
                     {
-                        // Field Reverse (^FR) is a geometry XOR against the painted background.
-                        // Skia's InvertDrawWhite normalises a white-drawn reverse shape to black before
-                        // the XOR, so white vs black reverse have the identical geometric effect here.
-                        background = Xor(background, black);
-                        whiteRegion = Exclude(whiteRegion, black);
+                        // ^FR: XOR the field against the visible black under it. Skia's InvertDrawWhite
+                        // normalises a white-drawn reverse to black before the XOR, so white vs black
+                        // reverse have the identical effect here — both go through `black`.
+                        if (black != null)
+                        {
+                            if (!trackingBlack)
+                            {
+                                visibleBlack = FoldVisibleBlack(ops);
+                                trackingBlack = true;
+                            }
+
+                            if (visibleBlack == null)
+                            {
+                                ops.Add(LabelOp.Black(black));     // nothing underneath: reverse is all black
+                                visibleBlack = black;
+                            }
+                            else
+                            {
+                                Geometry erase = Compat.Combine(black, visibleBlack, GeometryCombineMode.Intersect);
+                                Geometry add = Compat.Combine(black, visibleBlack, GeometryCombineMode.Exclude);
+                                ops.Add(LabelOp.WhiteFill(erase));  // erase where the field overlaps black
+                                ops.Add(LabelOp.Black(add));        // add black where it doesn't
+                                visibleBlack = Xor(visibleBlack, black);
+                            }
+                        }
                     }
                     else
                     {
                         if (black != null)
                         {
-                            background = Union(background, black);
-                            whiteRegion = Exclude(whiteRegion, black);
+                            ops.Add(LabelOp.Black(black));
+                            if (trackingBlack) visibleBlack = Union(visibleBlack, black);
                         }
 
                         if (white != null)
                         {
-                            background = Exclude(background, white);
-                            whiteRegion = Union(whiteRegion, white);
+                            ops.Add(LabelOp.WhiteFill(white));
+                            if (trackingBlack) visibleBlack = Exclude(visibleBlack, white);
                         }
+                    }
+
+                    foreach (ImageOp image in context.TakeImages())
+                    {
+                        ops.Add(LabelOp.Img(image));
                     }
                 }
                 catch (Exception ex)
@@ -223,22 +254,28 @@ namespace DotZpl.Rendering
                 }
             }
 
-            return (background, whiteRegion, images);
+            return ops;
         }
 
-        /// <summary>
-        /// Accumulate <paramref name="b"/> additively into <paramref name="a"/> as a true boolean
-        /// union.
-        ///
-        /// <para>A fill-rule <see cref="GeometryGroup"/> is NOT a safe union for independent
-        /// elements: two overlapping shapes with opposite contour winding cancel (count 0 under
-        /// NonZero / EvenOdd) rather than combine, punching an inverse-draw hole. That happens for
-        /// real labels — e.g. a large glyph drawn over a MaxiCode, where the glyph outline and the
-        /// MaxiCode hexagons wind opposite ways. Only a Boolean union (or painting each shape
-        /// separately) is correct here. <c>Compat.Combine</c> resolves to the eager
-        /// <c>Geometry.Combine</c> on WPF (a flat PathGeometry) and the lazy
-        /// <see cref="CombinedGeometry"/> on Avalonia.</para>
-        /// </summary>
+        /// <summary>Replay the ops emitted so far to recover the visible black region (black fills union, white fills erase).</summary>
+        private static Geometry? FoldVisibleBlack(List<LabelOp> ops)
+        {
+            Geometry? black = null;
+            foreach (LabelOp op in ops)
+            {
+                if (op.IsImage)
+                {
+                    continue;
+                }
+
+                black = op.White ? Exclude(black, op.Fill) : Union(black, op.Fill);
+            }
+
+            return black;
+        }
+
+        // Boolean helpers — used only on the rare ^FR path (the additive pipeline paints instead).
+        // Compat.Combine evaluates eagerly on WPF (flat PathGeometry) and lazily on Avalonia.
         private static Geometry? Union(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
@@ -246,9 +283,6 @@ namespace DotZpl.Rendering
             return Compat.Combine(a, b, GeometryCombineMode.Union);
         }
 
-        // Xor / Exclude likewise need the boolean op. Compat.Combine evaluates eagerly on WPF (one
-        // flat PathGeometry, no tree to walk at rasterise time) and stays with the lazy
-        // CombinedGeometry on Avalonia.
         private static Geometry? Xor(Geometry? a, Geometry? b)
         {
             if (a == null) return b;
