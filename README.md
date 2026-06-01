@@ -182,5 +182,6 @@ not affect SSIM; see the note in `DotZpl/Text/TextRenderer.cs`.
 
 ## License
 
-This project depends on the upstream `BinaryKits.Zpl` (submodule); refer to its repository for its
-license terms.
+DotZpl is licensed under the [MIT License](LICENSE) — the same licence as the upstream
+`BinaryKits.Zpl`. That dependency is consumed as a submodule and remains under its own MIT licence;
+refer to its repository for its terms.
