@@ -8,6 +8,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>DotZpl.Viewer</RootNamespace>
     <AssemblyName>DotZpl.Viewer</AssemblyName>
+    <!-- Application.ThemeMode (the built-in WPF Fluent theme) is still flagged experimental. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
