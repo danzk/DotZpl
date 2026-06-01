@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="DotZpl/DotZpl.csproj" />
+  <Project Path="DotZpl.Viewer/DotZpl.Viewer.csproj" />
+  <Project Path="DotZpl.UnitTest/DotZpl.UnitTest.csproj" />
+</Solution>

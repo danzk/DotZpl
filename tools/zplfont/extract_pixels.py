@@ -6,7 +6,7 @@ binary font can be turned back into editable text. Pixels outside the matrix cel
 clipped (and reported) — the cell, per the matrix, is authoritative.
 
 Usage:
-    python extract_pixels.py ../../WpfZpl/Resources/font-a.ttf A -o glyphs/font-a.pixfont
+    python extract_pixels.py ../../DotZpl/Resources/font-a.ttf A -o glyphs/font-a.pixfont
 """
 import argparse
 import os

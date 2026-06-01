@@ -1,19 +1,21 @@
-# WpfZpl
+# DotZpl
 
-A **WPF (`System.Windows.Media`) rendering backend for ZPL labels**, ported from the SkiaSharp
-renderer in [BinaryKits.Zpl](https://github.com/BinaryKits/BinaryKits.Zpl). It parses ZPL II with
-the upstream `BinaryKits.Zpl.Viewer` analyzer and renders each label element natively in WPF —
-as vector `Geometry` wherever possible — instead of SkiaSharp.
+A **managed-graphics rendering backend for ZPL labels** — targeting both **WPF**
+(`System.Windows.Media`) and **Avalonia** (`Avalonia.Media`) from a single multi-targeted source.
+Ported from the SkiaSharp renderer in [BinaryKits.Zpl](https://github.com/BinaryKits/BinaryKits.Zpl),
+it parses ZPL II with the upstream `BinaryKits.Zpl.Viewer` analyzer and renders each label element
+natively — as vector `Geometry` wherever possible — instead of SkiaSharp.
 
 The port is validated against the original Skia renderer: a test suite renders the same ZPL through
 both backends and compares the images (SSIM + pixel similarity), writing side-by-side comparison
-PNGs for visual inspection.
+PNGs for visual inspection. A separate headless Avalonia smoke test exercises the Avalonia path.
 
-## Why a WPF backend?
+## Why a managed-graphics backend?
 
 The upstream viewer renders with SkiaSharp. This project provides a drop-in equivalent for
-Windows/WPF applications that want to render ZPL using the platform's own graphics stack, with three
-deliberate design choices that go beyond a 1:1 port:
+applications that want to render ZPL through the host UI framework's own graphics stack — WPF on
+Windows, or Avalonia on any of its platforms — with three deliberate design choices that go beyond a
+1:1 port:
 
 - **Everything is geometry.** Shapes, text, and barcodes are built as `Geometry` so they compose
   uniformly and support the Field Reverse operator faithfully.
@@ -25,38 +27,41 @@ deliberate design choices that go beyond a 1:1 port:
 ## Repository layout
 
 ```
-WpfZpl/                     WPF rendering library (net10.0-windows, UseWPF)
+DotZpl/                     rendering library, multi-targeted (net10.0-windows + net10.0)
   Rendering/               orchestrator, draw context, drawer base classes, options
   Text/                    GlyphRun-based text renderer + font manager
   ElementDrawers/          one drawer per ZPL element type
-  Resources/               embedded graphic-symbol font (ZplGS.ttf)
-WpfZpl.Viewer/             native WPF MVVM viewer app (ports the WebApi web UI)
-WpfZpl.UnitTest/           MSTest suite: Skia-vs-WPF image comparison
+  Controls/                WPF FrameworkElement (ZplLabelView) — net10.0-windows only
+  Resources/               embedded ZplGS + pixel fonts (font-a/b/c.ttf)
+  Compat.cs                cross-framework helpers (WPF vs Avalonia API-shape differences)
+DotZpl.Viewer/             native WPF MVVM viewer app (ports the WebApi web UI)
+DotZpl.UnitTest/           MSTest suite: Skia-vs-WPF image comparison
   Support/                 render harness, comparer (SSIM/pixel), STA runner
   Tests/                   one test class per element category
+DotZpl.Avalonia.SmokeTest/ headless Avalonia render smoke tests (xUnit v3)
 BinaryKits.Zpl/            git submodule (fork) — see split below
-WpfZpl.slnx                solution
+DotZpl.slnx                solution (WPF projects only; the Avalonia smoke test is run separately)
 ```
 
 `BinaryKits.Zpl` is a **git submodule**. Its `Viewer` assembly originally bundled the ZPL parser
 together with the SkiaSharp renderer, which would force a Skia dependency on any consumer. It is
-split into two assemblies so the WPF library stays **Skia-free**:
+split into two assemblies so `DotZpl` stays **Skia-free**:
 
 - **`BinaryKits.Zpl.Analyzer`** — the Skia-free parsing/analysis core (`ZplAnalyzer`, command
-  analyzers, `VirtualPrinter`, `IPrinterStorage`, models, symbology encoders, helpers). `WpfZpl`
+  analyzers, `VirtualPrinter`, `IPrinterStorage`, models, symbology encoders, helpers). `DotZpl`
   references this.
 - **`BinaryKits.Zpl.Viewer`** — the original SkiaSharp drawers, now referencing the Analyzer. Used
   only by the **test project** as the comparison reference.
 
-So `WpfZpl` and a consuming WPF app depend only on the Skia-free Analyzer; SkiaSharp never enters
-the application's dependency graph.
+So `DotZpl` and a consuming app depend only on the Skia-free Analyzer; SkiaSharp never enters the
+application's dependency graph.
 
 ## Requirements
 
-- Windows (WPF is Windows-only)
 - .NET 10 SDK
-- The renderer must run on an **STA thread** (a WPF requirement for `RenderTargetBitmap` /
-  `GlyphTypeface`). The test harness handles this automatically.
+- **WPF target** (`net10.0-windows`): Windows only; renderer must run on an **STA thread** (a WPF
+  requirement for `RenderTargetBitmap` / `GlyphTypeface`). The unit-test harness handles this.
+- **Avalonia target** (`net10.0`): cross-platform; runs anywhere Avalonia 12 does.
 
 ## Getting started
 
@@ -65,19 +70,21 @@ git clone --recurse-submodules <repo-url>
 # if you already cloned without submodules:
 git submodule update --init --recursive
 
-dotnet build WpfZpl.slnx
-dotnet test  WpfZpl.UnitTest/WpfZpl.UnitTest.csproj
+dotnet build DotZpl.slnx
+dotnet test  DotZpl.UnitTest/DotZpl.UnitTest.csproj
+# headless Avalonia smoke tests (kept outside the .slnx to avoid multi-TFM build races):
+dotnet test  DotZpl.Avalonia.SmokeTest/DotZpl.Avalonia.SmokeTest.csproj
 ```
 
 ## Usage
 
 ### As a WPF control (easiest)
 
-`ZplLabelView` (in `WpfZpl.Controls`) parses a ZPL string and renders it as vector content, with
+`ZplLabelView` (in `DotZpl.Controls`) parses a ZPL string and renders it as vector content, with
 fit-to-control scaling (`Stretch`) and whole-label `RotationAngle`:
 
 ```xml
-<Window xmlns:zpl="clr-namespace:WpfZpl.Controls;assembly=WpfZpl">
+<Window xmlns:zpl="clr-namespace:DotZpl.Controls;assembly=DotZpl">
     <zpl:ZplLabelView Zpl="{Binding ZplText}"
                       LabelWidth="101.6" LabelHeight="152.4" PrintDensityDpmm="8"
                       RotationAngle="0" Stretch="Uniform" OpaqueBackground="True" />
@@ -91,7 +98,7 @@ control, use the renderer directly:
 
 ```csharp
 using BinaryKits.Zpl.Viewer;   // parser/storage (Skia-free Analyzer assembly)
-using WpfZpl.Rendering;
+using DotZpl.Rendering;
 
 // 1. Parse ZPL (one storage instance is reused so ~DG/~DY downloads are
 //    available to ^IM / ^XG recall elements at render time).
@@ -99,7 +106,7 @@ var storage  = new PrinterStorage();
 var analyzer = new ZplAnalyzer(storage);
 var elements = analyzer.Analyze(zplString).LabelInfos[0].ZplElements;
 
-var drawer = new WpfZplElementDrawer(storage, new WpfDrawerOptions { OpaqueBackground = true });
+var drawer = new ZplElementDrawer(storage, new DrawerOptions { OpaqueBackground = true });
 ```
 
 The primary output is **native, scalable WPF drawing content** — no rasterisation. Coordinates are
@@ -123,8 +130,8 @@ byte[] png = drawer.DrawPng(elements, 101.6, 152.4, 8);
 File.WriteAllBytes("label.png", png);
 ```
 
-`WpfDrawerOptions` exposes `OpaqueBackground`, `Antialias`, the `ReplaceDashWithEnDash` /
-`ReplaceUnderscoreWithEnSpace` text options, a `WpfFontManager`, and a `TextBackend`
+`DrawerOptions` exposes `OpaqueBackground`, `Antialias`, the `ReplaceDashWithEnDash` /
+`ReplaceUnderscoreWithEnSpace` text options, a `FontManager`, and a `TextBackend`
 (`GlyphRun` by default; `FormattedText` available for comparison).
 
 ## Supported elements
@@ -140,10 +147,10 @@ File.WriteAllBytes("label.png", png);
 
 ## Viewer app
 
-`WpfZpl.Viewer` is a small WPF MVVM application that ports the WebApi's browser UI to the desktop:
+`DotZpl.Viewer` is a small WPF MVVM application that ports the WebApi's browser UI to the desktop:
 a Test/Example label browser, a ZPL editor with size/dpmm presets, whole-label rotation, a live
 preview (the `ZplLabelView` control), a non-supported-commands panel, and Save PNG / Save ZPL. Run it
-with `dotnet run --project WpfZpl.Viewer`.
+with `dotnet run --project DotZpl.Viewer`.
 
 ## Test harness & fidelity
 
@@ -161,7 +168,7 @@ Typical parity against the Skia reference:
 **Note on text weight:** both backends resolve to the *same* font files, but WPF's linear-coverage
 geometry fill renders text marginally heavier than Skia's gamma-corrected, hinted glyph rasteriser
 at small sizes. This is inherent to the two engines (it is not a font or weight mismatch) and does
-not affect SSIM; see the note in `WpfZpl/Text/WpfTextRenderer.cs`.
+not affect SSIM; see the note in `DotZpl/Text/TextRenderer.cs`.
 
 ## License
 

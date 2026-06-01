@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DotZpl.Viewer</RootNamespace>
+    <AssemblyName>DotZpl.Viewer</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotZpl\DotZpl.csproj" />
+  </ItemGroup>
+
+  <!-- Sample labels (Example/ and Test/) shown in the browser, copied next to the app. -->
+  <ItemGroup>
+    <Content Include="..\BinaryKits.Zpl\src\BinaryKits.Zpl.Viewer.WebApi\Labels\**\*.zpl2"
+             Link="Labels\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

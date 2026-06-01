@@ -7,7 +7,7 @@ monospace advance = width + intercharacter gap, vertical metrics from the baseli
 result renders at exactly the matrix when drawn at emSize = matrixHeight.
 
 Usage:
-    python build_font.py glyphs/font-a.pixfont A -o ../../WpfZpl/Resources/font-a.ttf
+    python build_font.py glyphs/font-a.pixfont A -o ../../DotZpl/Resources/font-a.ttf
 """
 import argparse
 import os

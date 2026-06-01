@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="WpfZpl/WpfZpl.csproj" />
-  <Project Path="WpfZpl.Viewer/WpfZpl.Viewer.csproj" />
-  <Project Path="WpfZpl.UnitTest/WpfZpl.UnitTest.csproj" />
-</Solution>
