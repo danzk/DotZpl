@@ -14,9 +14,19 @@ using ZXing.PDF417.Internal;
 
 namespace DotZpl.ElementDrawers
 {
-    /// <summary>WPF port of <c>Pdf417ElementDrawer</c> (<c>^B7</c>). Bit-matrix scaling logic copied verbatim.</summary>
+    /// <summary>
+    /// Port of <c>Pdf417ElementDrawer</c> (<c>^B7</c>). Renders at module resolution and lets the
+    /// <c>DrawBarcode</c> scale transform handle the pixel sizing — the Skia port materialised an
+    /// upscaled pixel <see cref="BitMatrix"/> and emitted one rectangle per pixel-row run (which is
+    /// fine for Skia because it then becomes a raster blit), but in our vector pipeline that
+    /// inflated the rectangle count by <c>pdf417.Height</c> and was the dominant render cost.
+    /// </summary>
     public class Pdf417ElementDrawer : BarcodeDrawerBase
     {
+        // PDF417_ASPECT_RATIO=A3: ZXing writes each codeword bar across 3 identical pixel rows in the
+        // matrix to encode the 3:1 height/width aspect ratio. We sample one row per bar instead.
+        private const int AspectRatio = 3;
+
         public override bool CanDraw(ZplElementBase element) => element is ZplPDF417;
 
         public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
@@ -90,71 +100,18 @@ namespace DotZpl.ElementDrawers
                 { EncodeHintType.PDF417_DIMENSIONS, new Dimensions(mincols, maxcols, minrows, maxrows) },
             };
 
-            BitMatrix defaultBitmatrix = writer.encode(content, BarcodeFormat.PDF_417, 0, 0, hints);
+            BitMatrix matrix = writer.encode(content, BarcodeFormat.PDF_417, 0, 0, hints);
 
-            int barHeight = pdf417.ModuleWidth * 3;
-            BitMatrix upscaled = ProportionalUpscale(defaultBitmatrix, pdf417.ModuleWidth);
-            BitMatrix result = VerticalScale(upscaled, pdf417.Height, barHeight);
-
-            int width = result.Width;
-            int height = result.Height;
-            Geometry bars = BitMatrixToGeometry(result, 1);
-            DrawBarcode(bars, x, y, width, height, pdf417.FieldOrigin != null, pdf417.FieldOrientation);
+            // Module-resolution geometry: one rect per horizontal run per bar (one in AspectRatio
+            // rows). The DrawBarcode scale transform sizes each module to (moduleWidth × Height).
+            int moduleRows = matrix.Height / AspectRatio;
+            int width = matrix.Width * pdf417.ModuleWidth;
+            int height = moduleRows * pdf417.Height;
+            Geometry bars = BitMatrixToGeometry(matrix, pixelScale: 1, rowStride: AspectRatio);
+            DrawBarcode(bars, x, y, width, height, pdf417.FieldOrigin != null, pdf417.FieldOrientation,
+                scaleX: pdf417.ModuleWidth, scaleY: pdf417.Height);
 
             return CalculateNextDefaultPosition(x, y, width, height, pdf417.FieldOrigin != null, pdf417.FieldOrientation, currentPosition);
-        }
-
-        private static BitMatrix ProportionalUpscale(BitMatrix old, int scale)
-        {
-            if (scale == 0 || scale == 1)
-            {
-                return old;
-            }
-
-            BitMatrix upscaled = new(old.Width * scale, old.Height * scale);
-            for (int i = 0; i < old.Height; i++)
-            {
-                BitArray oldRow = old.getRow(i, null);
-                for (int j = 0; j < old.Width; j++)
-                {
-                    if (!oldRow[j])
-                    {
-                        continue;
-                    }
-
-                    upscaled.setRegion(j * scale, i * scale, scale, scale);
-                }
-            }
-
-            return upscaled;
-        }
-
-        private static BitMatrix VerticalScale(BitMatrix oldMatrix, int newBarHeight, int oldBarHeight)
-        {
-            int width = oldMatrix.Width;
-            int rows = oldMatrix.Height / oldBarHeight;
-
-            if (newBarHeight == oldBarHeight || newBarHeight == 0)
-            {
-                return oldMatrix;
-            }
-
-            BitMatrix scaled = new(oldMatrix.Width, rows * newBarHeight);
-            for (int i = 0; i < rows; i++)
-            {
-                BitArray oldRow = oldMatrix.getRow(i * oldBarHeight, null);
-                for (int j = 0; j < width; j++)
-                {
-                    if (!oldRow[j])
-                    {
-                        continue;
-                    }
-
-                    scaled.setRegion(j, i * newBarHeight, 1, newBarHeight);
-                }
-            }
-
-            return scaled;
         }
 
         private static PDF417ErrorCorrectionLevel ConvertErrorCorrection(int correction)

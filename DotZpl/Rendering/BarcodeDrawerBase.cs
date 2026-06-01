@@ -58,21 +58,35 @@ namespace DotZpl.Rendering
             return geo;
         }
 
-        /// <summary>Build 2-D matrix geometry (local 0-based coords), one rectangle per set cell (row run-merged).</summary>
-        protected static Geometry BitMatrixToGeometry(BitMatrix matrix, int pixelScale)
+        /// <summary>
+        /// Build 2-D matrix geometry (local 0-based coords), one rectangle per horizontal run on each
+        /// sampled row.
+        ///
+        /// <para><paramref name="pixelScale"/> sizes the emitted rectangles directly (one BitMatrix
+        /// cell → <paramref name="pixelScale"/> × <paramref name="pixelScale"/> rect). The caller can
+        /// instead leave <paramref name="pixelScale"/> at 1 and push a <see cref="ScaleTransform"/>
+        /// — that is preferred when the X and Y scales differ.</para>
+        ///
+        /// <para><paramref name="rowStride"/> reads one in every N rows of the matrix; useful when
+        /// ZXing emits the same bit pattern N times to encode the bar's aspect ratio (PDF417 with
+        /// PDF417_ASPECT_RATIO=A3 writes each bar across 3 identical pixel rows). Default is 1.</para>
+        /// </summary>
+        protected static Geometry BitMatrixToGeometry(BitMatrix matrix, int pixelScale, int rowStride = 1)
         {
             var geo = new StreamGeometry();
             using (StreamGeometryContext ctx = geo.Open())
             {
-                for (int row = 0; row < matrix.Height; row++)
+                int sampledRows = matrix.Height / rowStride;
+                for (int r = 0; r < sampledRows; r++)
                 {
+                    int sourceRow = r * rowStride;
                     int col = 0;
                     while (col < matrix.Width)
                     {
-                        if (!matrix[col, row]) { col++; continue; }
+                        if (!matrix[col, sourceRow]) { col++; continue; }
                         int start = col;
-                        while (col < matrix.Width && matrix[col, row]) { col++; }
-                        AddRect(ctx, start * pixelScale, row * pixelScale, (col - start) * pixelScale, pixelScale);
+                        while (col < matrix.Width && matrix[col, sourceRow]) { col++; }
+                        AddRect(ctx, start * pixelScale, r * pixelScale, (col - start) * pixelScale, pixelScale);
                     }
                 }
             }
@@ -112,8 +126,13 @@ namespace DotZpl.Rendering
             };
         }
 
-        /// <summary>Place local bar geometry at (x,y) with the non-field-origin y-adjust and rotation.</summary>
-        protected void DrawBarcode(Geometry barsLocal, double x, double y, int barcodeWidth, int barcodeHeight, bool useFieldOrigin, FieldOrientation fieldOrientation)
+        /// <summary>
+        /// Place local bar geometry at (x,y) with the non-field-origin y-adjust and rotation.
+        /// <paramref name="scaleX"/> / <paramref name="scaleY"/> are applied to the geometry before
+        /// translation (and before rotation), so a caller may emit the bars at any resolution they
+        /// like — typically module resolution — and let the transform handle the final pixel sizing.
+        /// </summary>
+        protected void DrawBarcode(Geometry barsLocal, double x, double y, int barcodeWidth, int barcodeHeight, bool useFieldOrigin, FieldOrientation fieldOrientation, double scaleX = 1.0, double scaleY = 1.0)
         {
             double drawY = y;
             if (!useFieldOrigin)
@@ -125,7 +144,10 @@ namespace DotZpl.Rendering
             RotateTransform? rot = GetRotationTransform(x, y, barcodeWidth, barcodeHeight, useFieldOrigin, fieldOrientation);
             if (rot != null) context.PushTransform(rot);
             context.PushTransform(new TranslateTransform(x, drawY));
+            bool scaled = scaleX != 1.0 || scaleY != 1.0;
+            if (scaled) context.PushTransform(new ScaleTransform(scaleX, scaleY));
             context.AddBlack(barsLocal);
+            if (scaled) context.Pop();
             context.Pop();
             if (rot != null) context.Pop();
         }
