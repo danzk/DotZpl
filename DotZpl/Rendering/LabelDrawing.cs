@@ -3,15 +3,48 @@ using System.Collections.Generic;
 namespace DotZpl.Rendering
 {
     /// <summary>
-    /// A label baked down to its rendered form: the composed black/white geometry regions, the
-    /// image ops with their transforms, and the label's pixel dimensions. Decoupled from the
-    /// UI-framework <c>DrawingGroup</c> so the same built artifact can be drawn straight into a
-    /// live <see cref="DrawingContext"/> (a control's render pass, a <see cref="RenderTargetBitmap"/>,
-    /// etc.) on both backends — including Avalonia, whose <c>DrawingGroup</c> recording context
-    /// does not implement <c>DrawBitmap</c>.
+    /// One entry in a <see cref="LabelDrawing"/>'s display list: either a geometry fill (black or
+    /// white) or an image draw. Replayed in document order, which reproduces ZPL compositing by the
+    /// painter's algorithm — black over black unions, white over black erases, images layer in order —
+    /// with no boolean geometry ops.
+    /// </summary>
+    internal readonly struct LabelOp
+    {
+        /// <summary>Fill geometry; <c>null</c> marks an image op (see <see cref="Image"/>).</summary>
+        public Geometry? Fill { get; }
+
+        /// <summary>Fill colour for a geometry op: <c>true</c> white, <c>false</c> black.</summary>
+        public bool White { get; }
+
+        /// <summary>The image to draw; valid only when <see cref="Fill"/> is <c>null</c>.</summary>
+        public ImageOp Image { get; }
+
+        private LabelOp(Geometry? fill, bool white, ImageOp image)
+        {
+            Fill = fill;
+            White = white;
+            Image = image;
+        }
+
+        public bool IsImage => Fill == null;
+
+        public static LabelOp Black(Geometry fill) => new(fill, false, default);
+        public static LabelOp WhiteFill(Geometry fill) => new(fill, true, default);
+        public static LabelOp Img(ImageOp image) => new(null, false, image);
+    }
+
+    /// <summary>
+    /// A label baked down to an ordered display list of fill / image ops plus the label's pixel
+    /// dimensions. Decoupled from any UI-framework geometry container, so the same built artifact can
+    /// be drawn straight into a live <see cref="DrawingContext"/> (a control's render pass, a
+    /// <see cref="RenderTargetBitmap"/>, etc.) on both backends.
     ///
-    /// <para>Build once via <see cref="ZplRenderer.CreateLabelDrawing"/>, reuse across renders.
-    /// Pure data — no caching, no thread affinity.</para>
+    /// <para>Drawing replays the ops in document order — the painter's algorithm — so overlapping
+    /// additive elements simply union visually (no boolean geometry, no fill-rule winding cancellation),
+    /// and white-over-black / image layering follow from draw order.</para>
+    ///
+    /// <para>Build once via <see cref="ZplRenderer.CreateLabelDrawing"/>, reuse across renders. Pure
+    /// data — no caching, no thread affinity.</para>
     /// </summary>
     public sealed class LabelDrawing
     {
@@ -21,19 +54,14 @@ namespace DotZpl.Rendering
         /// <summary>Label height in dots.</summary>
         public int Height { get; }
 
-        private readonly Geometry? _background;
-        private readonly Geometry? _whiteRegion;
-        private readonly IReadOnlyList<ImageOp> _images;
+        private readonly IReadOnlyList<LabelOp> _ops;
         private readonly bool _opaqueBackground;
 
-        internal LabelDrawing(int width, int height, Geometry? background, Geometry? whiteRegion,
-                              IReadOnlyList<ImageOp> images, bool opaqueBackground)
+        internal LabelDrawing(int width, int height, IReadOnlyList<LabelOp> ops, bool opaqueBackground)
         {
             Width = width;
             Height = height;
-            _background = background;
-            _whiteRegion = whiteRegion;
-            _images = images;
+            _ops = ops;
             _opaqueBackground = opaqueBackground;
         }
 
@@ -50,28 +78,26 @@ namespace DotZpl.Rendering
             context.DrawRectangle(_opaqueBackground ? Brushes.White : Brushes.Transparent, null,
                 new Rect(0, 0, Width, Height));
 
-            if (_background != null)
+            foreach (LabelOp op in _ops)
             {
-                context.DrawGeometry(Brushes.Black, null, _background);
-            }
-
-            if (_whiteRegion != null)
-            {
-                context.DrawGeometry(Brushes.White, null, _whiteRegion);
-            }
-
-            foreach (ImageOp op in _images)
-            {
-                if (op.Transform.IsIdentity)
+                if (op.IsImage)
                 {
-                    context.DrawImage(op.Image, op.Destination);
+                    ImageOp img = op.Image;
+                    if (img.Transform.IsIdentity)
+                    {
+                        context.DrawImage(img.Image, img.Destination);
+                    }
+                    else
+                    {
+                        using (context.PushTransform(img.Transform))
+                        {
+                            context.DrawImage(img.Image, img.Destination);
+                        }
+                    }
                 }
                 else
                 {
-                    using (context.PushTransform(op.Transform))
-                    {
-                        context.DrawImage(op.Image, op.Destination);
-                    }
+                    context.DrawGeometry(op.White ? Brushes.White : Brushes.Black, null, op.Fill!);
                 }
             }
         }

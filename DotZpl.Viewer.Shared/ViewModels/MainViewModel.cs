@@ -17,23 +17,35 @@ namespace DotZpl.Viewer.Shared.ViewModels
     {
         private const double Inch2Mm = 25.4;
 
+        // Raw TCP socket port Zebra printers listen on (JetDirect/RAW). Used when the printer address
+        // omits an explicit ":port", matching the BinaryKits viewer's hardcoded 9100.
+        private const int DefaultPrinterPort = 9100;
+
+        // Integer supersample factor for the exported PNG: render at this many pixels per ZPL dot so the
+        // saved image stays sharp when an image viewer / printer scales it up. Native 8 dpmm (203 dpi) ×4
+        // ≈ 812 dpi.
+        private const int PngExportScale = 4;
+
         private readonly IDispatcher _dispatcher;
         private readonly IFileDialogService _fileDialog;
+        private readonly IZplPrinterService _printer;
 
         // Debounces live rendering so we re-render shortly after the user stops typing, not per
         // keystroke. A thread-pool timer fires after the idle window and posts the render call
         // back onto the UI thread via the injected dispatcher (each platform's UI thread).
         private readonly Timer _renderTimer;
 
-        public MainViewModel(IDispatcher dispatcher, IFileDialogService fileDialog)
+        public MainViewModel(IDispatcher dispatcher, IFileDialogService fileDialog, IZplPrinterService? printer = null)
         {
             _dispatcher = dispatcher;
             _fileDialog = fileDialog;
+            _printer = printer ?? new NetworkZplPrinterService();
             _renderTimer = new Timer(_ => _dispatcher.Post(RenderNow), null, Timeout.Infinite, Timeout.Infinite);
 
             RenderCommand = new RelayCommand(RenderNow);
             SavePngCommand = new RelayCommand(() => _ = SavePngAsync());
             SaveZplCommand = new RelayCommand(() => _ = SaveZplAsync());
+            PrintCommand = new RelayCommand(() => _ = PrintAsync(), CanPrint);
             ResetTransformCommand = new RelayCommand(ResetTransform);
 
             LoadLabels();
@@ -70,7 +82,11 @@ namespace DotZpl.Viewer.Shared.ViewModels
         #region Editor / parameters
 
         private string _zplText = string.Empty;
-        public string ZplText { get => _zplText; set { if (SetProperty(ref _zplText, value)) ScheduleRender(); } }
+        public string ZplText
+        {
+            get => _zplText;
+            set { if (SetProperty(ref _zplText, value)) { ScheduleRender(); (PrintCommand as RelayCommand)?.RaiseCanExecuteChanged(); } }
+        }
 
         public IReadOnlyList<LabelFormat> LabelFormats { get; } = new[]
         {
@@ -129,6 +145,32 @@ namespace DotZpl.Viewer.Shared.ViewModels
         private double _offsetY;
         public double OffsetY { get => _offsetY; set => SetProperty(ref _offsetY, value); }
 
+        private double _zoom = 1.0;
+        public double Zoom { get => _zoom; set => SetProperty(ref _zoom, value); }
+
+        #endregion
+
+        #region Printing
+
+        // "host" or "host:port" (port defaults to 9100). The current ZPL is streamed to this address
+        // over a raw TCP socket — the same network-print approach as the BinaryKits viewer.
+        private string _printerAddress = string.Empty;
+        public string PrinterAddress
+        {
+            get => _printerAddress;
+            set { if (SetProperty(ref _printerAddress, value)) (PrintCommand as RelayCommand)?.RaiseCanExecuteChanged(); }
+        }
+
+        private bool _isPrinting;
+        public bool IsPrinting
+        {
+            get => _isPrinting;
+            private set { if (SetProperty(ref _isPrinting, value)) (PrintCommand as RelayCommand)?.RaiseCanExecuteChanged(); }
+        }
+
+        private string? _printStatus;
+        public string? PrintStatus { get => _printStatus; private set => SetProperty(ref _printStatus, value); }
+
         #endregion
 
         #region Preview (what the control renders) + diagnostics
@@ -159,6 +201,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
         public ICommand RenderCommand { get; }
         public ICommand SavePngCommand { get; }
         public ICommand SaveZplCommand { get; }
+        public ICommand PrintCommand { get; }
         public ICommand ResetTransformCommand { get; }
 
         #endregion
@@ -168,6 +211,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
             RotationAngle = 0;
             OffsetX = 0;
             OffsetY = 0;
+            Zoom = 1.0;
         }
 
         private void LoadLabel(LabelItem item)
@@ -268,13 +312,73 @@ namespace DotZpl.Viewer.Shared.ViewModels
                 }
 
                 byte[] png = new ZplRenderer(storage, new ZplRendererOptions { OpaqueBackground = true })
-                    .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm);
+                    .DrawPng(info.LabelInfos[0].ZplElements, LabelWidth, LabelHeight, PrintDensityDpmm, PngExportScale);
                 File.WriteAllBytes(path, png);
+                SystemShell.OpenInDefaultApp(path);
             }
             catch (Exception ex)
             {
                 RenderError = ex.Message;
             }
+        }
+
+        private bool CanPrint()
+            => !IsPrinting && !string.IsNullOrWhiteSpace(PrinterAddress) && !string.IsNullOrWhiteSpace(ZplText);
+
+        /// <summary>Stream the current ZPL to the configured network printer (raw TCP, BinaryKits-style).</summary>
+        private async System.Threading.Tasks.Task PrintAsync()
+        {
+            if (!TryParsePrinterAddress(PrinterAddress, out string host, out int port))
+            {
+                PrintStatus = "Invalid printer address (use host or host:port).";
+                return;
+            }
+
+            IsPrinting = true;
+            PrintStatus = $"Printing to {host}:{port}…";
+            try
+            {
+                await _printer.SendAsync(host, port, ZplText);
+                PrintStatus = $"Sent to {host}:{port}.";
+            }
+            catch (Exception ex)
+            {
+                PrintStatus = $"Print failed: {ex.Message}";
+            }
+            finally
+            {
+                IsPrinting = false;
+            }
+        }
+
+        /// <summary>Split "host" / "host:port" into parts, defaulting the port to <see cref="DefaultPrinterPort"/>.</summary>
+        private static bool TryParsePrinterAddress(string address, out string host, out int port)
+        {
+            host = string.Empty;
+            port = DefaultPrinterPort;
+
+            string trimmed = address.Trim();
+            if (trimmed.Length == 0)
+            {
+                return false;
+            }
+
+            int colon = trimmed.LastIndexOf(':');
+            if (colon < 0)
+            {
+                host = trimmed;
+                return true;
+            }
+
+            host = trimmed[..colon];
+            string portText = trimmed[(colon + 1)..];
+            if (host.Length == 0)
+            {
+                return false;
+            }
+
+            // No port after the colon → keep the default; an explicit but invalid port is an error.
+            return portText.Length == 0 || int.TryParse(portText, out port) && port is > 0 and <= 65535;
         }
 
         private async System.Threading.Tasks.Task SaveZplAsync()
@@ -283,6 +387,7 @@ namespace DotZpl.Viewer.Shared.ViewModels
             if (path != null)
             {
                 File.WriteAllText(path, ZplText ?? string.Empty);
+                SystemShell.OpenInDefaultApp(path);
             }
         }
 

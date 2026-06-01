@@ -65,19 +65,19 @@ namespace DotZpl.ElementDrawers
             double rOuter = cornerRadius;
             double rInner = cornerRadius == 0 ? 0 : Math.Max(0, cornerRadius - border / 2.0);
 
-            var outer = new RectangleGeometry(new Rect(baseX, top, width1, height1), rOuter, rOuter);
+            var outerRect = new Rect(baseX, top, width1, height1);
 
             Geometry borderGeometry;
             double iw = width1 - 2.0 * border;
             double ih = height1 - 2.0 * border;
             if (iw <= 0 || ih <= 0)
             {
-                borderGeometry = outer; // border fills the whole box (solid line/bar)
+                borderGeometry = new RectangleGeometry(outerRect, rOuter, rOuter); // solid bar
             }
             else
             {
-                var inner = new RectangleGeometry(new Rect(baseX + border, top + border, iw, ih), rInner, rInner);
-                borderGeometry = Compat.MakeRing(outer, inner);
+                var innerRect = new Rect(baseX + border, top + border, iw, ih);
+                borderGeometry = Compat.MakeRectRing(outerRect, rOuter, innerRect, rInner);
             }
 
             // Reverse always feeds the black bucket (the orchestrator decides background vs white XOR).
