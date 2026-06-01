@@ -38,7 +38,7 @@
         </TabControl>
 
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      Background="#DDDDDD" />
+                      Background="#80808080" />
 
         <!-- ZPL editor -->
         <DockPanel Grid.Column="2">
@@ -48,11 +48,11 @@
         </DockPanel>
 
         <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      Background="#DDDDDD" />
+                      Background="#80808080" />
 
         <!-- Preview: label format / actions toolbar + transform toolbar + render + diagnostics -->
         <DockPanel Grid.Column="4">
-            <Border DockPanel.Dock="Top" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6">
+            <Border DockPanel.Dock="Top" BorderBrush="#80808080" BorderThickness="0,0,0,1" Padding="6">
                 <WrapPanel>
                     <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <ComboBox ItemsSource="{Binding LabelFormats}" SelectedItem="{Binding SelectedFormat}"
@@ -82,7 +82,7 @@
                 </WrapPanel>
             </Border>
 
-            <Border DockPanel.Dock="Top" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1" Padding="6">
+            <Border DockPanel.Dock="Top" BorderBrush="#80808080" BorderThickness="0,0,0,1" Padding="6">
                 <WrapPanel>
                     <TextBlock Text="Rotation:" VerticalAlignment="Center" Margin="0,0,4,0" />
                     <ComboBox ItemsSource="{Binding RotationAngles}" SelectedItem="{Binding RotationAngle}"
@@ -107,6 +107,7 @@
 
             <StackPanel DockPanel.Dock="Bottom">
                 <Border Background="#FFF3CD" BorderBrush="#FFE69C" BorderThickness="1" Padding="8" Margin="0,6,0,0"
+                        TextElement.Foreground="#664D03"
                         IsVisible="{Binding HasUnknownCommands}">
                     <StackPanel>
                         <TextBlock Text="Non-supported commands" FontWeight="Bold" />
@@ -121,6 +122,7 @@
                 </Border>
 
                 <Border Background="#F8D7DA" BorderBrush="#F5C2C7" BorderThickness="1" Padding="8" Margin="0,6,0,0"
+                        TextElement.Foreground="#842029"
                         IsVisible="{Binding HasRenderError}">
                     <StackPanel>
                         <TextBlock Text="Render error" FontWeight="Bold" />
