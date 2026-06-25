@@ -8,12 +8,17 @@ namespace DotZpl.ElementDrawers
 {
     /// <summary>
     /// WPF port of <c>GraphicEllipseElementDrawer</c> (<c>^GE</c>). Border = outer ellipse XOR inner
-    /// ellipse. Mirrors the Skia drawer which (by virtue of its type-check quirk) never applies
-    /// reverse/white and always draws black.
+    /// ellipse, honouring Field Reverse (<c>^FR</c>) and white line colour.
     /// </summary>
     public class GraphicEllipseElementDrawer : ElementDrawerBase
     {
         public override bool CanDraw(ZplElementBase element) => element is ZplGraphicEllipse;
+
+        public override bool IsReverseDraw(ZplElementBase element)
+            => element is ZplGraphicEllipse ellipse && ellipse.ReversePrint;
+
+        public override bool IsWhiteDraw(ZplElementBase element)
+            => element is ZplGraphicEllipse ellipse && ellipse.LineColor == LineColor.White;
 
         public override Point Draw(ZplElementBase element, ZplRendererOptions options, Point currentPosition, InternationalFont internationalFont)
         {
@@ -59,7 +64,15 @@ namespace DotZpl.ElementDrawers
                 borderGeometry = Compat.MakeEllipseRing(center, outerRx, outerRy, innerRx, innerRy);
             }
 
-            context.AddBlack(borderGeometry);
+            // Reverse always feeds the black bucket (the orchestrator decides background vs white XOR).
+            if (!graphicEllipse.ReversePrint && graphicEllipse.LineColor == LineColor.White)
+            {
+                context.AddWhite(borderGeometry);
+            }
+            else
+            {
+                context.AddBlack(borderGeometry);
+            }
 
             // Skia advances using the half-border-adjusted x/y; replicate.
             double halfBorder = border / 2.0;
